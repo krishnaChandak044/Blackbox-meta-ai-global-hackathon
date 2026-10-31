@@ -83,6 +83,8 @@ def run_tracking_task(self, media_id: str, job_id: str) -> dict:
             return result
         except Exception as exc:
             logger.exception("tracking.task_failed", extra={"media_id": media_id})
+            db.rollback()
+            job = db.get(ProcessingJob, job_id)
             job.status = JobStatus.FAILED
             job.error_message = str(exc)[:1000]
             job.completed_at = datetime.now(timezone.utc)
@@ -120,11 +122,15 @@ def _run(db: Session, media_id: str, job: ProcessingJob) -> dict:
     )
     for ot in existing:
         db.delete(ot)
-    db.commit()
+    db.flush()
 
     # ── 6. Project & persist ──────────────────────────────────────────────────
     for raw_track in tracks:
-        ground_traj = project_track(raw_track, hom_result, scale_result) if hom_result else None
+        ground_traj = (
+            project_track(raw_track, hom_result, scale_result)
+            if hom_result is not None and scale_result is not None
+            else None
+        )
 
         # Build world lookup for fast access
         world_by_frame: dict[int, tuple[float, float, float]] = {}
@@ -181,7 +187,7 @@ def _run(db: Session, media_id: str, job: ProcessingJob) -> dict:
             operator="system",
             notes=(
                 f"{len(tracks)} tracks produced. "
-                f"World projection: {'yes' if hom_result else 'no (no active calibration)'}."
+                f"Metric projection: {'yes' if scale_result else 'no (validated scale unavailable)'}."
             ),
         )
     )
@@ -191,7 +197,7 @@ def _run(db: Session, media_id: str, job: ProcessingJob) -> dict:
 
     return {
         "track_count": len(tracks),
-        "world_projection": hom_result is not None,
+        "world_projection": scale_result is not None,
         "scale_available": scale_result is not None,
     }
 

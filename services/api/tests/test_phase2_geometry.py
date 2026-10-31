@@ -32,6 +32,7 @@ from engine.geometry.homography import (
 )
 from engine.geometry.scale import ScaleUnavailable, derive_scale, require_scale
 from engine.tracking.ground_contact import ProjectionConfig, project_track
+from engine.tracking.motion import MotionTracker
 from engine.tracking.protocols import BoundingBox, ObjectLabel, Track, TrackPoint
 from engine.tracking.synthetic import SyntheticTracker
 from services.api.db import session as db_session
@@ -210,6 +211,26 @@ def test_synthetic_tracker_produces_valid_tracks(tmp_path):
             gx, gy = p.bbox.ground_contact_px
             assert gx == pytest.approx((p.bbox.x_min + p.bbox.x_max) / 2, abs=0.1)
             assert gy == pytest.approx(p.bbox.y_max, abs=0.1)
+
+
+def test_motion_tracker_uses_video_pixels(tmp_path: Path):
+    import cv2
+    import numpy as np
+
+    path = tmp_path / "moving.mp4"
+    writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), 10, (320, 240))
+    assert writer.isOpened()
+    for frame in range(35):
+        image = np.zeros((240, 320, 3), dtype=np.uint8)
+        if frame >= 10:
+            x = 20 + frame * 3
+            cv2.rectangle(image, (x, 110), (x + 45, 155), (255, 255, 255), -1)
+        writer.write(image)
+    writer.release()
+    tracks = MotionTracker().track(str(path))
+    assert tracks
+    assert all(t.points[0].label.source_model == MotionTracker.MODEL_NAME for t in tracks)
+    assert all(t.points[0].label.category == "unknown" for t in tracks)
 
 
 # ── 8. Ground contact projection ──────────────────────────────────────────────

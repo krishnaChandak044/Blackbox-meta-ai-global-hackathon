@@ -18,7 +18,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from engine.geometry.homography import (
@@ -32,7 +32,9 @@ from services.api.auth.session import current_user
 from services.api.db.models import (
     CalibrationAnchor,
     HomographyFit,
+    ObjectTrack,
     SourceMedia,
+    TrackPointRow,
 )
 from services.api.db.session import get_db
 
@@ -106,6 +108,18 @@ async def _get_media_or_404(case_id: str, media_id: str, db: AsyncSession) -> So
     return media
 
 
+async def _invalidate_calibration(db: AsyncSession, media_id: str) -> None:
+    fits = await db.execute(select(HomographyFit).where(HomographyFit.media_id == media_id))
+    for old in fits.scalars():
+        old.is_active = False
+    ids = select(ObjectTrack.id).where(ObjectTrack.media_id == media_id)
+    await db.execute(
+        update(TrackPointRow)
+        .where(TrackPointRow.track_id.in_(ids))
+        .values(world_x=None, world_y=None, sigma_m=None)
+    )
+
+
 # ── Anchor endpoints ───────────────────────────────────────────────────────────
 
 
@@ -137,6 +151,7 @@ async def add_anchor(
         created_by=user,
     )
     db.add(anchor)
+    await _invalidate_calibration(db, media_id)
     await db.commit()
     await db.refresh(anchor)
     return AnchorResponse.model_validate(anchor)
@@ -178,6 +193,7 @@ async def delete_anchor(
     if anchor.case_id != case_id:
         raise HTTPException(status_code=404, detail="Anchor not found")
     await db.delete(anchor)
+    await _invalidate_calibration(db, media_id)
     await db.commit()
 
 

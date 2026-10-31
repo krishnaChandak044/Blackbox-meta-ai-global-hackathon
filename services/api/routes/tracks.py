@@ -263,6 +263,10 @@ async def correct_point(
     point = result.scalar_one_or_none()
     if not point:
         raise HTTPException(status_code=404, detail=f"No point at frame {frame_index}")
+    if payload.bbox_x_max <= payload.bbox_x_min or payload.bbox_y_max <= payload.bbox_y_min:
+        raise HTTPException(
+            status_code=422, detail="Bounding box must have positive width and height"
+        )
 
     # Update bbox
     point.bbox_x_min = payload.bbox_x_min

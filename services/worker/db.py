@@ -12,9 +12,9 @@ import os
 from collections.abc import Generator
 from contextlib import contextmanager
 
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
-from dotenv import load_dotenv
 
 load_dotenv()
 
