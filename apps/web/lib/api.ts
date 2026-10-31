@@ -103,6 +103,8 @@ export const casesApi = {
 
 /* ── Media API ────────────────────────────────────────────────────────────── */
 export const mediaApi = {
+  streamUrl: (caseId: string, mediaId: string) =>
+    `${V1}/cases/${caseId}/media/${mediaId}/stream`,
   list: (caseId: string) => req<SourceMedia[]>(`/cases/${caseId}/media/`),
   get:  (caseId: string, mediaId: string) =>
     req<SourceMedia>(`/cases/${caseId}/media/${mediaId}`),
@@ -191,3 +193,141 @@ export const authApi = {
   session: () => req<{ authenticated: boolean }>("/auth/session"),
   logout: () => req<{ authenticated: boolean }>("/auth/session", { method: "DELETE" }),
 };
+
+/* ── Phase 2 Types ────────────────────────────────────────────────────────── */
+
+export interface CalibrationAnchor {
+  id: string;
+  media_id: string;
+  label: string;
+  pixel_x: number;
+  pixel_y: number;
+  world_x: number;
+  world_y: number;
+  known_distance_m: number | null;
+  is_distance_ref_b: boolean;
+  reprojection_error_px: number | null;
+  created_at: string;
+}
+
+export interface HomographyFit {
+  id: string;
+  media_id: string;
+  anchor_count: number;
+  reprojection_rmse_px: number;
+  condition_number: number;
+  scale_metres_per_pixel: number | null;
+  scale_relative_error: number | null;
+  scale_source: string | null;
+  H: number[][];
+  fitted_at: string;
+  is_active: boolean;
+  per_anchor_errors_px: number[];
+}
+
+export interface TrackPointOut {
+  frame_index: number;
+  presentation_ts_s: number;
+  bbox_x_min: number;
+  bbox_y_min: number;
+  bbox_x_max: number;
+  bbox_y_max: number;
+  gc_pixel_x: number;
+  gc_pixel_y: number;
+  world_x: number | null;
+  world_y: number | null;
+  sigma_m: number | null;
+  detection_confidence: number;
+  is_interpolated: boolean;
+  is_human_corrected: boolean;
+}
+
+export interface TrackSummary {
+  id: string;
+  tracker_track_id: string;
+  category: string;
+  tracker_model: string;
+  first_frame: number;
+  last_frame: number;
+  point_count: number;
+  is_complete: boolean;
+  is_human_confirmed: boolean;
+  created_at: string;
+}
+
+export interface TrackDetail extends TrackSummary {
+  points: TrackPointOut[];
+}
+
+/* ── Calibration API ──────────────────────────────────────────────────────── */
+export const calibrationApi = {
+  listAnchors: (caseId: string, mediaId: string) =>
+    req<CalibrationAnchor[]>(`/cases/${caseId}/media/${mediaId}/calibration/anchors`),
+
+  addAnchor: (
+    caseId: string,
+    mediaId: string,
+    body: {
+      label: string;
+      pixel_x: number;
+      pixel_y: number;
+      world_x: number;
+      world_y: number;
+      known_distance_m?: number;
+      is_distance_ref_b?: boolean;
+    },
+  ) =>
+    req<CalibrationAnchor>(
+      `/cases/${caseId}/media/${mediaId}/calibration/anchors`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+
+  deleteAnchor: (caseId: string, mediaId: string, anchorId: string) =>
+    fetch(`${V1}/cases/${caseId}/media/${mediaId}/calibration/anchors/${anchorId}`, {
+      method: "DELETE",
+      credentials: "include",
+    }),
+
+  fitHomography: (caseId: string, mediaId: string) =>
+    req<HomographyFit>(`/cases/${caseId}/media/${mediaId}/calibration/fit`, { method: "POST" }),
+
+  getActiveFit: (caseId: string, mediaId: string) =>
+    req<HomographyFit | null>(`/cases/${caseId}/media/${mediaId}/calibration/fit`),
+};
+
+/* ── Tracks API ───────────────────────────────────────────────────────────── */
+export const tracksApi = {
+  list: (caseId: string, mediaId: string) =>
+    req<TrackSummary[]>(`/cases/${caseId}/media/${mediaId}/tracks/`),
+
+  get: (caseId: string, mediaId: string, trackId: string) =>
+    req<TrackDetail>(`/cases/${caseId}/media/${mediaId}/tracks/${trackId}`),
+
+  run: (caseId: string, mediaId: string) =>
+    req<{ job_id: string }>(`/cases/${caseId}/media/${mediaId}/tracks/run`, { method: "POST" }),
+
+  confirm: (caseId: string, mediaId: string, trackId: string) =>
+    req<TrackSummary>(
+      `/cases/${caseId}/media/${mediaId}/tracks/${trackId}/confirm`,
+      { method: "POST" },
+    ),
+
+  correctPoint: (
+    caseId: string,
+    mediaId: string,
+    trackId: string,
+    frameIndex: number,
+    bbox: { bbox_x_min: number; bbox_y_min: number; bbox_x_max: number; bbox_y_max: number },
+  ) =>
+    req<TrackPointOut>(
+      `/cases/${caseId}/media/${mediaId}/tracks/${trackId}/points/${frameIndex}`,
+      { method: "PATCH", body: JSON.stringify(bbox) },
+    ),
+
+  delete: (caseId: string, mediaId: string, trackId: string) =>
+    fetch(`${V1}/cases/${caseId}/media/${mediaId}/tracks/${trackId}`, {
+      method: "DELETE",
+      credentials: "include",
+    }),
+};
+

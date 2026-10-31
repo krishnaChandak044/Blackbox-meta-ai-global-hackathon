@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse, ORJSONResponse
 from services.api.auth.session import _password, _secret, is_authenticated
 from services.api.auth.session import router as auth_router
 from services.api.db.session import init_db
-from services.api.routes import cases, jobs, media
+from services.api.routes import calibration, cases, jobs, media, tracks
 
 logger = structlog.get_logger()
 
@@ -52,6 +52,8 @@ app.include_router(auth_router, prefix=PREFIX)
 app.include_router(cases.router, prefix=PREFIX)
 app.include_router(media.router, prefix=PREFIX)
 app.include_router(jobs.router, prefix=PREFIX)
+app.include_router(calibration.router, prefix=PREFIX)
+app.include_router(tracks.router, prefix=PREFIX)
 
 
 @app.get("/health", tags=["health"])

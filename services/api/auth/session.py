@@ -74,3 +74,17 @@ def session(request: Request) -> dict[str, bool]:
 def logout(response: Response) -> dict[str, bool]:
     response.delete_cookie(COOKIE, path="/api/v1")
     return {"authenticated": False}
+
+
+# ── FastAPI dependency ──────────────────────────────────────────────────────────
+
+
+def current_user(request: Request) -> str:
+    """
+    FastAPI dependency that returns a user identifier string.
+
+    Phase 1/2: single-user session — always returns "demo-user" when the
+    cookie is valid (authentication is enforced by the global middleware).
+    Phase 3+: replace with JWT sub claim or DB lookup.
+    """
+    return "demo-user"
