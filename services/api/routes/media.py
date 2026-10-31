@@ -238,6 +238,22 @@ async def download_original(
     )
 
 
+@router.get("/{media_id}/stream")
+async def stream_original(
+    case_id: str, media_id: str, db: AsyncSession = Depends(get_db)
+) -> FileResponse:
+    result = await db.execute(
+        select(SourceMedia).where(SourceMedia.id == media_id, SourceMedia.case_id == case_id)
+    )
+    media = result.scalar_one_or_none()
+    if media is None:
+        raise HTTPException(status_code=404, detail="Media not found")
+    path = Path(media.storage_path)
+    if not path.exists() or sha256_file(path) != media.sha256:
+        raise HTTPException(status_code=409, detail="Original media integrity check failed")
+    return FileResponse(path, media_type=media.mime_type, content_disposition_type="inline")
+
+
 @router.post("/{media_id}/retry", status_code=status.HTTP_202_ACCEPTED)
 async def retry_probe(
     case_id: str, media_id: str, db: AsyncSession = Depends(get_db)

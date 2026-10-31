@@ -221,3 +221,161 @@ class ProcessingLog(Base):
     notes: Mapped[str | None] = mapped_column(Text)
 
     case: Mapped["Case"] = relationship("Case", back_populates="processing_log")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Phase 2 — Perception & Geometry
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+# ── Calibration Anchor ────────────────────────────────────────────────────────
+
+
+class CalibrationAnchor(Base):
+    """
+    A single pixel ↔ world correspondence used to fit the homography.
+
+    pixel_(x,y) is the image-space location (column, row).
+    world_(x,y) is the real-world ground-plane position in metres
+    (origin is user-defined, typically the first anchor placed).
+
+    known_distance_ref marks the two anchors that define the validation
+    distance (at most one pair per media clip).
+    """
+
+    __tablename__ = "calibration_anchors"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    media_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("source_media.id", ondelete="CASCADE")
+    )
+    case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"))
+    label: Mapped[str] = mapped_column(String(100))  # human-readable, e.g. "stop-line NW"
+    pixel_x: Mapped[float] = mapped_column(Float)  # column
+    pixel_y: Mapped[float] = mapped_column(Float)  # row
+    world_x: Mapped[float] = mapped_column(Float)  # east, metres
+    world_y: Mapped[float] = mapped_column(Float)  # north, metres
+    known_distance_m: Mapped[float | None] = mapped_column(Float)  # validation pair A
+    is_distance_ref_b: Mapped[bool] = mapped_column(Boolean, default=False)  # validation pair B
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    created_by: Mapped[str] = mapped_column(String(100))  # user or "system"
+
+    # Reprojection error for this anchor after the last homography fit (px)
+    reprojection_error_px: Mapped[float | None] = mapped_column(Float)
+
+
+# ── Homography Fit ────────────────────────────────────────────────────────────
+
+
+class HomographyFit(Base):
+    """
+    Stored result of one homography estimation run.
+
+    H_json stores the 3×3 matrix as a JSON array [[r0c0, r0c1, r0c2], ...].
+    Recomputation is idempotent: same anchors → same H.
+    """
+
+    __tablename__ = "homography_fits"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    media_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("source_media.id", ondelete="CASCADE")
+    )
+    case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"))
+    anchor_count: Mapped[int] = mapped_column(Integer)
+    reprojection_rmse_px: Mapped[float] = mapped_column(Float)
+    condition_number: Mapped[float] = mapped_column(Float)
+    scale_metres_per_pixel: Mapped[float | None] = mapped_column(Float)
+    scale_relative_error: Mapped[float | None] = mapped_column(Float)
+    scale_source: Mapped[str | None] = mapped_column(String(100))
+    H_json: Mapped[str] = mapped_column(Text)  # [[...],[...],[...]]
+    fitted_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    fitted_by: Mapped[str] = mapped_column(String(100))  # user or "system"
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)  # latest wins
+
+
+# ── Object Track ──────────────────────────────────────────────────────────────
+
+
+class ObjectTrack(Base):
+    """
+    One detected object's complete trajectory in a single media clip.
+
+    category: "vehicle" | "pedestrian" | "cyclist" | "unknown"
+    tracker_model: e.g. "sam-3.1-hiera-large" or "synthetic-v0"
+    is_human_confirmed: set True when a human has reviewed the track.
+    """
+
+    __tablename__ = "object_tracks"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    media_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("source_media.id", ondelete="CASCADE")
+    )
+    case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"))
+    tracker_track_id: Mapped[str] = mapped_column(String(100))  # ID assigned by tracker
+    category: Mapped[str] = mapped_column(String(50))
+    tracker_model: Mapped[str] = mapped_column(String(100))
+    first_frame: Mapped[int] = mapped_column(Integer)
+    last_frame: Mapped[int] = mapped_column(Integer)
+    point_count: Mapped[int] = mapped_column(Integer)
+    is_complete: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_human_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    human_confirmed_by: Mapped[str | None] = mapped_column(String(100))
+    human_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    # Relationships
+    points: Mapped[list["TrackPointRow"]] = relationship(
+        "TrackPointRow",
+        back_populates="track",
+        cascade="all, delete-orphan",
+        order_by="TrackPointRow.frame_index",
+    )
+
+
+# ── Track Point ───────────────────────────────────────────────────────────────
+
+
+class TrackPointRow(Base):
+    """
+    Single detection within an ObjectTrack.
+
+    Stores both the pixel bounding box and the projected world position
+    (if a calibrated HomographyFit existed at track time).
+
+    sigma_m is the 1-sigma combined position uncertainty in metres.
+    NULL world_* means no calibration was available — callers must not
+    compute speed from NULL world positions.
+    """
+
+    __tablename__ = "track_points"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    track_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("object_tracks.id", ondelete="CASCADE")
+    )
+    frame_index: Mapped[int] = mapped_column(Integer)
+    presentation_ts_s: Mapped[float] = mapped_column(Float)
+
+    # Pixel bounding box
+    bbox_x_min: Mapped[float] = mapped_column(Float)
+    bbox_y_min: Mapped[float] = mapped_column(Float)
+    bbox_x_max: Mapped[float] = mapped_column(Float)
+    bbox_y_max: Mapped[float] = mapped_column(Float)
+
+    # Ground contact pixel (bottom-centre of bbox)
+    gc_pixel_x: Mapped[float] = mapped_column(Float)
+    gc_pixel_y: Mapped[float] = mapped_column(Float)
+
+    # World projection (NULL when no calibration)
+    world_x: Mapped[float | None] = mapped_column(Float)
+    world_y: Mapped[float | None] = mapped_column(Float)
+    sigma_m: Mapped[float | None] = mapped_column(Float)
+
+    # Detection quality
+    detection_confidence: Mapped[float] = mapped_column(Float)
+    is_interpolated: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_human_corrected: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    track: Mapped["ObjectTrack"] = relationship("ObjectTrack", back_populates="points")
