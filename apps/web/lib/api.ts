@@ -302,6 +302,24 @@ export interface Transcript { id: string; case_id: string; media_id: string | nu
 export interface ClaimAssertion { assertion_type: string; subject: string; value: number | null; unit: string | null; qualifier: string | null; raw_text: string; source_ts_start: number; source_ts_end: number; }
 export interface TranscriptClaim { id: string; transcript_id: string; case_id: string; speaker: string; raw_text: string; assertions: ClaimAssertion[]; extraction_confidence: number; source_ts_start: number; source_ts_end: number; created_at: string; }
 export interface ClaimVerdict { id: string; claim_id: string; case_id: string; verdict: string; confidence: number; evidence_frame_start: number | null; evidence_frame_end: number | null; evidence_json: string | null; explanation: string; homography_fit_id: string | null; checked_at: string; checked_by: string; }
+export interface DynamicsRun {
+  run_id: string; status: string; track_id: string; calibration_fit_id: string;
+  model_name: string; model_version: string; seed: number; interval_type: string;
+  entry_speed_kmh: number | null; entry_speed_lo_kmh: number | null; entry_speed_hi_kmh: number | null;
+  mean_decel_ms2: number | null; mean_decel_lo_ms2: number | null; mean_decel_hi_ms2: number | null;
+  fitted_points_json: string | null; uncertainty_json: string | null; certificates_json: string | null;
+  fit_quality_json: string | null; braking_onset_json: string | null; error_message: string | null;
+  created_at: string; completed_at: string | null;
+}
+export interface CounterfactualResponse {
+  id: string; baseline_run_id: string; status: string; simulated_points: Array<Record<string, number>>;
+  stopping_distance_m: number | null; stopping_time_s: number | null; sensitivity: Array<Record<string, unknown>>;
+  extrapolation_outside_support: boolean; illustrative_label: string; assumptions: Record<string, unknown>; created_at: string;
+}
+export interface RivalResponse {
+  id: string; primary_run_id: string; manifest: Record<string, unknown>; rivals: Array<Record<string, unknown>>;
+  empty_search_message: string; second_view_used: boolean; second_view_notes: string; created_at: string;
+}
 export const transcriptsApi = {
   list: (caseId: string) => req<Transcript[]>(`/cases/${caseId}/transcripts/`),
   get: (caseId: string, id: string) => req<Transcript>(`/cases/${caseId}/transcripts/${id}`),
@@ -317,6 +335,18 @@ export const claimsApi = {
   getCheck: (caseId: string, claimId: string) => req<ClaimVerdict | null>(`/cases/${caseId}/claims/${claimId}/check`),
   update: (caseId: string, claimId: string, body: { raw_text?: string; speaker?: string }) => req<TranscriptClaim>(`/cases/${caseId}/claims/${claimId}`, { method: "PATCH", body: JSON.stringify(body) }),
   delete: (caseId: string, claimId: string) => fetch(`${V1}/cases/${caseId}/claims/${claimId}`, { method: "DELETE", credentials: "include" }),
+};
+export const phase4Api = {
+  queueDynamics: (caseId: string, mediaId: string, body: { track_id: string; calibration_fit_id: string; seed?: number }) =>
+    req<{ dynamics_run_id: string; job_id: string; status: string }>(`/cases/${caseId}/media/${mediaId}/dynamics`, { method: "POST", body: JSON.stringify(body) }),
+  getDynamics: (caseId: string, mediaId: string) =>
+    req<DynamicsRun>(`/cases/${caseId}/media/${mediaId}/dynamics`),
+  simulate: (caseId: string, mediaId: string, body: { baseline_run_id: string; braking_onset_shift_s: number; entry_speed_override_kmh?: number | null; decel_override_ms2?: number | null }) =>
+    req<CounterfactualResponse>(`/cases/${caseId}/media/${mediaId}/simulate`, { method: "POST", body: JSON.stringify(body) }),
+  searchRivals: (caseId: string, mediaId: string, body: { primary_run_id: string; seed: number; grid_n?: number; acceptance_threshold_m?: number }) =>
+    req<RivalResponse>(`/cases/${caseId}/media/${mediaId}/rivals/search`, { method: "POST", body: JSON.stringify(body) }),
+  getRivals: (caseId: string, mediaId: string) =>
+    req<RivalResponse>(`/cases/${caseId}/media/${mediaId}/rivals`),
 };
 
 /* ── Tracks API ───────────────────────────────────────────────────────────── */

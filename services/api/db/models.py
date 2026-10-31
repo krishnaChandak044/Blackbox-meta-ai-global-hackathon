@@ -381,6 +381,9 @@ class TrackPointRow(Base):
     world_x: Mapped[float | None] = mapped_column(Float)
     world_y: Mapped[float | None] = mapped_column(Float)
     sigma_m: Mapped[float | None] = mapped_column(Float)
+    # Pixel-localisation component kept separately; sigma_m is the combined
+    # Phase 2 budget and must not be double-counted by Phase 4.
+    pixel_localisation_sigma_m: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Detection quality
     detection_confidence: Mapped[float] = mapped_column(Float)
@@ -450,3 +453,114 @@ class ClaimCheck(Base):
     homography_fit_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("homography_fits.id", ondelete="SET NULL"), nullable=True)
     checked_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     checked_by: Mapped[str] = mapped_column(String(100), default="system")
+
+
+# ── Phase 4: Dynamics inference run ─────────────────────────────────────────
+
+
+class DynamicsRun(Base):
+    """
+    Immutable record of one piecewise-constant-acceleration inference run.
+    Linked to specific track, calibration, and media content versions.
+    Outputs are stored as JSON blobs — never reused when inputs change.
+    """
+    __tablename__ = "dynamics_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"))
+    media_id: Mapped[str] = mapped_column(String(36), ForeignKey("source_media.id", ondelete="CASCADE"))
+
+    # Input provenance — changing any of these makes this run stale
+    track_id: Mapped[str] = mapped_column(String(36), ForeignKey("object_tracks.id", ondelete="RESTRICT"))
+    track_version_hash: Mapped[str] = mapped_column(String(64))
+    calibration_fit_id: Mapped[str] = mapped_column(String(36), ForeignKey("homography_fits.id", ondelete="RESTRICT"))
+    media_sha256: Mapped[str] = mapped_column(String(64))
+    model_name: Mapped[str] = mapped_column(String(100))
+    model_version: Mapped[str] = mapped_column(String(20))
+    software_revision: Mapped[str] = mapped_column(String(64))
+    seed: Mapped[int] = mapped_column(Integer)
+    params_json: Mapped[str] = mapped_column(Text)          # exact parameters snapshot
+
+    # Run status
+    status: Mapped[str] = mapped_column(String(20), default="queued")
+    job_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("processing_jobs.id"), nullable=True)
+
+    # Results — stored as serialised JSON (immutable after status=done)
+    fitted_points_json: Mapped[str | None] = mapped_column(Text)
+    uncertainty_json: Mapped[str | None] = mapped_column(Text)
+    certificates_json: Mapped[str | None] = mapped_column(Text)
+    fit_quality_json: Mapped[str | None] = mapped_column(Text)
+    braking_onset_json: Mapped[str | None] = mapped_column(Text)
+
+    # Derived scalars (also in fitted_points_json but surfaced for quick queries)
+    entry_speed_kmh: Mapped[float | None] = mapped_column(Float)
+    entry_speed_lo_kmh: Mapped[float | None] = mapped_column(Float)
+    entry_speed_hi_kmh: Mapped[float | None] = mapped_column(Float)
+    mean_decel_ms2: Mapped[float | None] = mapped_column(Float)
+    mean_decel_lo_ms2: Mapped[float | None] = mapped_column(Float)
+    mean_decel_hi_ms2: Mapped[float | None] = mapped_column(Float)
+    interval_type: Mapped[str] = mapped_column(String(30), default="illustrative_range")
+
+    error_message: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+# ── Phase 4: Counterfactual simulation result ────────────────────────────────
+
+
+class CounterfactualRun(Base):
+    """
+    Versioned counterfactual simulation result.
+    Always labeled ILLUSTRATIVE — linked to an immutable DynamicsRun.
+    """
+    __tablename__ = "counterfactual_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"))
+    media_id: Mapped[str] = mapped_column(String(36), ForeignKey("source_media.id", ondelete="CASCADE"))
+    baseline_run_id: Mapped[str] = mapped_column(String(36), ForeignKey("dynamics_runs.id", ondelete="CASCADE"))
+
+    # User-declared intervention (JSON)
+    intervention_json: Mapped[str] = mapped_column(Text)
+
+    # Results
+    simulated_points_json: Mapped[str | None] = mapped_column(Text)
+    sensitivity_json: Mapped[str | None] = mapped_column(Text)
+    stopping_distance_m: Mapped[float | None] = mapped_column(Float)
+    stopping_time_s: Mapped[float | None] = mapped_column(Float)
+    extrapolation_outside_support: Mapped[bool] = mapped_column(Boolean, default=False)
+    assumptions_json: Mapped[str] = mapped_column(Text, default="{}")
+    illustrative_label: Mapped[str] = mapped_column(
+        String(200), default="ILLUSTRATIVE — model scenario, not observed fact"
+    )
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    created_by: Mapped[str] = mapped_column(String(100), default="system")
+
+
+# ── Phase 4: Rival hypothesis search ────────────────────────────────────────
+
+
+class RivalSearch(Base):
+    """
+    Immutable record of a bounded rival-hypothesis search.
+    Includes the full manifest (never implies exhaustiveness).
+    """
+    __tablename__ = "rival_searches"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"))
+    media_id: Mapped[str] = mapped_column(String(36), ForeignKey("source_media.id", ondelete="CASCADE"))
+    primary_run_id: Mapped[str] = mapped_column(String(36), ForeignKey("dynamics_runs.id", ondelete="CASCADE"))
+
+    # Search manifest (JSON) — dimensions, bounds, seed, objective, threshold, n_evaluated
+    manifest_json: Mapped[str] = mapped_column(Text)
+
+    # Results
+    rivals_json: Mapped[str] = mapped_column(Text, default="[]")
+    empty_search_message: Mapped[str] = mapped_column(Text, default="")
+    second_view_used: Mapped[bool] = mapped_column(Boolean, default=False)
+    second_view_notes: Mapped[str] = mapped_column(Text, default="No second view provided.")
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

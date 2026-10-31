@@ -289,6 +289,7 @@ export default function CaseDetailPage() {
                           <td>
                             <Link className="btn btn-ghost btn-sm" href={`/cases/${id}/media/${m.id}/tracks`}>Tracks</Link>
                             <Link className="btn btn-ghost btn-sm" href={`/cases/${id}/media/${m.id}/calibration`}>Calibrate</Link>
+                            <Link className="btn btn-ghost btn-sm" href={`/cases/${id}/media/${m.id}/dynamics`}>Dynamics</Link>
                             <button className="btn btn-ghost btn-sm" onClick={() => mediaApi.downloadOriginal(id, m.id, m.original_filename)}>Download original</button>
                             {m.status === "failed" && <button className="btn btn-ghost btn-sm" onClick={async () => { await mediaApi.retry(id, m.id); await refresh(); }}>Retry processing</button>}
                             <button

@@ -40,6 +40,80 @@ This is an implementation order for the full PRD, not a feature reduction. Each 
 - **G8, differentiation:** missing-evidence suggestion adds value; rival hypothesis is found and disambiguated.
 - **G9, product:** fresh upload reaches export with no hidden intervention and readable limitations.
 
+## Phase 4 implementation plan — physics, simulation, and rivals
+
+### Purpose and non-goals
+
+Phase 4 answers two bounded questions: what motion histories are consistent with the calibrated tracks, and how do explicitly selected assumptions change a simulated outcome? It does not determine legal fault, driver intent, reaction time, or a unique real-world crash narrative. Every result is an analysis of supplied observations under versioned assumptions.
+
+The fit consumes track observations and calibration/probe metadata only. Phase 3 statements must never enter the fitting or optimization objective; they can be compared with the finished, versioned result afterward.
+
+### Inputs and eligibility
+
+The worker must snapshot and record the exact input IDs, content hashes/versions, parameters, software revision, and random seed used for a run. Inputs are:
+
+- One explicitly selected vehicle track, with frame index, presentation timestamp, ground-contact point, and tracker localization uncertainty per observation.
+- A valid ground-plane mapping and scale in SI units, including homography reprojection RMSE and scale relative error.
+- Frame timing and variable-frame-rate metadata from the Phase 1 probe.
+- A declared motion model and parameter bounds. Initial model: piecewise constant acceleration in 2D over a short, user-selected interval; do not silently assume a level road, constant friction, or no steering.
+
+Reject or return `not_identifiable` when the track is unconfirmed/ambiguous, calibration is absent or invalid, timestamps are non-monotonic/unavailable, units are unknown, the interval lacks enough observations, or required uncertainty metadata is missing. Never turn image pixels directly into absolute speed. Missing observations must not be filled in as if measured; any smoothing/interpolation must be marked as model output.
+
+### Dynamics inference and output contract
+
+Implement a framework-free numerical core in `engine/dynamics/` using NumPy and SciPy only. Use a deterministic likelihood/least-squares fit with explicit parameter bounds and robust residual handling. A Bayesian posterior is optional only after priors and posterior diagnostics are recorded; do not call a point fit “Bayesian.” The fit must expose residuals, fit quality, parameter correlations or profile sensitivity, convergence status, and model version.
+
+Return typed, versioned results containing:
+
+- Smoothed positions and velocity vectors with timestamp/frame provenance and uncertainty intervals.
+- Braking-onset interval only when the observed trajectory has a supported deceleration change point; otherwise `not_identifiable` or `conditional`.
+- Deceleration interval only when the selected model is sufficiently constrained and passes fit diagnostics.
+- The five uncertainty contributions separately: pixel localization, homography reprojection, scale calibration, frame timestamp, and model assumptions. Record each distribution/range, source metadata, and propagation method.
+- An identifiability certificate per quantity: `measurable`, `conditional`, or `not_identifiable`, with machine-readable reasons, assumptions, evidence references, and the additional observation that could improve it.
+
+### Uncertainty protocol
+
+Use seeded Monte Carlo propagation over documented error distributions. Keep the five sources separately inspectable, then report their combined effect and interactions. State whether an interval is a percentile range, a confidence interval, or only an illustrative range. Do not label an interval “95% CI” until repeated held-out evaluations demonstrate the corresponding empirical coverage. If a source distribution is unknown, expose that limitation and use a broad declared bound or abstain; do not invent precision.
+
+### Counterfactual simulator
+
+The simulator consumes an immutable dynamics result plus explicit user-selected interventions, such as braking onset shift or entry-speed change. It must not mutate the fitted baseline or imply the intervention happened. Show baseline observations, fitted trajectory, and simulated counterfactual as distinct layers. Every output is labeled `ILLUSTRATIVE — model scenario, not observed fact` in the UI and exports.
+
+Document model assumptions alongside each result (initially: selected coordinate plane, interval, acceleration model, and any assumed road/steering/friction parameters). Define allowable slider bounds from observed support and configured limits; visibly flag extrapolation outside the observed range. Sensitivity output must state its perturbation ranges and metric, and identify which additional measurement could reduce uncertainty rather than claim that a control is causal truth.
+
+### Bounded rival-hypothesis search
+
+Implement a deterministic, bounded parameter search. Version and record the dimensions searched, bounds, grid/sampling strategy, seed, objective, residual metric, acceptance threshold, and number of candidates evaluated. Return ranked alternatives only when they are materially different from the primary fit and remain within the predeclared residual tolerance. If none qualify, say “no acceptable rival found in the searched bounds”; never imply that all possible alternatives were ruled out.
+
+Second-camera evidence may disambiguate a rival only when clips are synchronized, calibrated into a compatible frame, and include the relevant observed interval. Report the specific residual/evidence change that rejects a rival. If alignment or calibration is inadequate, retain the rival as unresolved.
+
+### API, jobs, storage, and invalidation
+
+- `POST /cases/{case_id}/media/{media_id}/dynamics` queues an inference job and returns a job ID; `GET .../dynamics` returns the latest immutable run and status.
+- `POST /cases/{case_id}/media/{media_id}/simulate` validates the baseline run ID and intervention bounds, then returns a versioned illustrative result.
+- `GET /cases/{case_id}/media/{media_id}/rivals` returns the bounded search manifest and ranked candidates, including an explicit empty-search outcome.
+- Every request and response has a Pydantic/OpenAPI contract, units, nullable fields, enums, validation errors, and provenance. Jobs surface queued/running/done/failed states and error details.
+- Persist immutable run records and link outputs to track IDs, track/calibration versions, media hashes, parameter/config hashes, model version, and seed. A changed track, calibration, media index, or model configuration makes dependent outputs stale; never silently reuse them.
+- Add Alembic migrations for all new result/job tables or fields. Deployments run migrations explicitly; `Base.metadata.create_all()` is not a migration strategy for existing databases.
+
+### Frontend and report requirements
+
+Build report panels at `/cases/[id]/media/[id]/dynamics`, `/simulate`, and `/rivals`. Show observed points separately from fitted and simulated paths. Every numeric quantity displays units, interval type, interval bounds, and certificate status; e.g. `speed: 52–68 km/h (illustrative 95% range under listed assumptions)` until coverage is validated. Never render a bare estimate as established fact. Include an assumptions/provenance drawer and links to source frames. Clearly badge simulated paths and synthetic fixtures as `ILLUSTRATIVE` in every chart, card, export, and screenshot.
+
+### Implementation status and migration note
+
+The Phase 4 implementation is on branch `feature/phase-4-physics`. The repository currently initializes tables with `Base.metadata.create_all()` and its Phase 3 Alembic revision is a partial schema patch with no base-schema parent. The Phase 4 migration is consequently additive for an existing app schema, but is not a standalone clean-install schema history. Production rollout must first establish a baseline migration and remove schema creation from API startup. Existing `track_points` receive a nullable pixel-localisation uncertainty column; old rows remain NULL and must be regenerated by rerunning tracking before metric inference.
+
+G5, G6, and G8 are not considered passed until the evaluation artifacts described below are run and recorded. The implementation alone does not establish validated forensic accuracy.
+
+### Acceptance gates for Phase 4
+
+- **G5 — recovery and interval coverage:** use a preregistered suite of seeded synthetic trajectories spanning speeds, braking profiles, noise, missing frames, and the five uncertainty sources. Keep a held-out scenario set. Report bias/error and empirical interval coverage with sample counts. Pass only if ground truth falls inside the claimed interval at the claimed rate within a predefined tolerance, and the result abstains on deliberately unidentifiable cases. One successful clip is not sufficient.
+- **G6 — reproducibility:** same canonical input hashes, parameters, software/model version, and seed produce identical serialized outputs on the supported runtime. Record tolerances if floating-point determinism across platforms is not guaranteed. Changing one declared assumption changes the expected output and sensitivity record; unrelated metadata does not.
+- **G8 — rival discovery and disambiguation:** include a predeclared planted rival that fits a single view within the acceptance residual. Verify search finds it within declared bounds. Add a synchronized, calibrated second view with a predeclared distinguishing observation; verify the rival residual crosses the rejection threshold for that documented reason. Also test a case where the second view is insufficient and the system keeps the rival unresolved.
+
+Do not mark Phase 4 complete until G5, G6, and G8 have recorded evaluation artifacts, the migration and API contracts are present, and the UI labels are visible in the export—not merely in development logs.
+
 ## Definition of done
 
 A feature is complete only when its UI, typed data contract, provenance, failure behavior, measurement, and one meaningful acceptance case are present. A mock response, fixture replay, or prerecorded video may support development, but must never be presented as a fresh live model result.
