@@ -85,7 +85,7 @@ ignore_missing_imports = true
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["services", "engine", "evaluation"]
-addopts = "--cov=. --cov-report=term-missing"
+addopts = ""
 
 [tool.hatch.build.targets.wheel]
 packages = ["services", "engine"]
