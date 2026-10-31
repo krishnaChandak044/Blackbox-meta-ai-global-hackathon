@@ -4,64 +4,64 @@
 setup:
 	@echo "▶ Setting up Python environment..."
 	uv venv
-	uv pip install -e ".[dev]"
+	uv pip install --python .venv/bin/python -e ".[dev]"
 	@echo "▶ Setting up JS environment..."
-	pnpm install
+	npm ci
 	@echo "▶ Copying .env.example → .env (if not present)..."
 	cp -n .env.example .env || true
 	@echo "▶ Installing pre-commit hooks..."
-	pre-commit install
+	.venv/bin/pre-commit install
 	@echo "✅ Setup complete. Edit .env before running 'make dev'."
 
 # ── Development servers ────────────────────────────────────────────────────────
 dev:
-	docker-compose up --build
+	docker compose up --build
 
 dev-api:
-	uvicorn services.api.main:app --reload --host 0.0.0.0 --port 8000
+	.venv/bin/uvicorn services.api.main:app --reload --host 0.0.0.0 --port 8000
 
 dev-worker:
-	celery -A services.worker.celery_app worker --loglevel=info
+	.venv/bin/celery -A services.worker.celery_app worker --loglevel=info
 
 dev-web:
-	pnpm --filter web dev
+	npm run dev --workspace=apps/web
 
 # ── Database ───────────────────────────────────────────────────────────────────
 db-migrate:
-	alembic upgrade head
+	.venv/bin/alembic upgrade head
 
 db-rollback:
-	alembic downgrade -1
+	.venv/bin/alembic downgrade -1
 
 db-revision:
-	alembic revision --autogenerate -m "$(msg)"
+	.venv/bin/alembic revision --autogenerate -m "$(msg)"
 
 # ── Tests ──────────────────────────────────────────────────────────────────────
 test:
-	pytest -x --tb=short
+	.venv/bin/pytest -x --tb=short
 
 test-engine:
-	pytest engine/ -x --tb=short
+	.venv/bin/pytest engine/ -x --tb=short
 
 test-api:
-	pytest services/api/ -x --tb=short
+	.venv/bin/pytest services/api/ -x --tb=short
 
 test-cov:
-	pytest --cov=. --cov-report=html
+	.venv/bin/pytest --cov=. --cov-report=html
 
 # ── Lint & Typecheck ──────────────────────────────────────────────────────────
 lint:
-	ruff check .
-	ruff format --check .
-	pnpm --filter web lint
+	.venv/bin/ruff check .
+	.venv/bin/ruff format --check .
+	npm run lint --workspace=apps/web
 
 format:
-	ruff check --fix .
-	ruff format .
+	.venv/bin/ruff check --fix .
+	.venv/bin/ruff format .
 
 typecheck:
 	mypy services/ engine/
-	pnpm --filter web typecheck
+	npm run typecheck --workspace=apps/web
 
 # ── Demo ───────────────────────────────────────────────────────────────────────
 demo:

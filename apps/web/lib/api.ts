@@ -5,9 +5,14 @@ const V1 = `${BASE}/api/v1`;
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${V1}${path}`, {
+    credentials: "include",
     headers: { "Content-Type": "application/json", ...init?.headers },
     ...init,
   });
+  if (res.status === 401 && !path.startsWith("/auth/")) {
+    if (typeof window !== "undefined") window.location.href = "/login";
+    throw new Error("Authentication required");
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail ?? "Request failed");
@@ -93,7 +98,7 @@ export const casesApi = {
   update: (id: string, body: Partial<Case>) =>
     req<Case>(`/cases/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   delete: (id: string) =>
-    fetch(`${V1}/cases/${id}`, { method: "DELETE" }),
+    fetch(`${V1}/cases/${id}`, { method: "DELETE", credentials: "include" }),
 };
 
 /* ── Media API ────────────────────────────────────────────────────────────── */
@@ -113,6 +118,7 @@ export const mediaApi = {
 
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `${V1}/cases/${caseId}/media/`);
+      xhr.withCredentials = true;
 
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) onProgress?.(Math.round((e.loaded / e.total) * 100));
@@ -122,6 +128,7 @@ export const mediaApi = {
         if (xhr.status === 201) {
           resolve(JSON.parse(xhr.responseText) as SourceMedia);
         } else {
+          if (xhr.status === 401) { window.location.href = "/login"; reject(new Error("Authentication required")); return; }
           const err = JSON.parse(xhr.responseText);
           reject(new Error(err.detail ?? "Upload failed"));
         }
@@ -131,11 +138,22 @@ export const mediaApi = {
     });
   },
 
+  downloadOriginal: async (caseId: string, mediaId: string, filename: string) => {
+    const res = await fetch(`${V1}/cases/${caseId}/media/${mediaId}/original`, { credentials: "include" });
+    if (!res.ok) throw new Error("Original download failed integrity or access check");
+    const url = URL.createObjectURL(await res.blob());
+    const link = document.createElement("a");
+    link.href = url; link.download = filename; document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  },
+
+  retry: (caseId: string, mediaId: string) => req<{ job_id: string }>(`/cases/${caseId}/media/${mediaId}/retry`, { method: "POST" }),
+
   checkIntegrity: (caseId: string, mediaId: string) =>
     req<IntegrityCheck>(`/cases/${caseId}/media/${mediaId}/integrity`),
 
   delete: (caseId: string, mediaId: string) =>
-    fetch(`${V1}/cases/${caseId}/media/${mediaId}`, { method: "DELETE" }),
+    fetch(`${V1}/cases/${caseId}/media/${mediaId}`, { method: "DELETE", credentials: "include" }),
 };
 
 /* ── Jobs API ─────────────────────────────────────────────────────────────── */
@@ -166,3 +184,10 @@ export function relativeTime(dateStr: string): string {
   if (h < 24)  return `${h}h ago`;
   return new Date(dateStr).toLocaleDateString();
 }
+
+
+export const authApi = {
+  login: (password: string) => req<{ authenticated: boolean }>("/auth/session", { method: "POST", body: JSON.stringify({ password }) }),
+  session: () => req<{ authenticated: boolean }>("/auth/session"),
+  logout: () => req<{ authenticated: boolean }>("/auth/session", { method: "DELETE" }),
+};

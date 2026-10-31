@@ -123,11 +123,16 @@ Aggregates consented, anonymized cases at the same junction to identify recurrin
 
 ## 🚀 Getting Started
 
-> ⚠️ Project is currently in active development. Setup instructions will be added as the stack is finalized.
+> Phase 1 requires a private access password and starts media probing after upload. See the commands below.
 
 ```bash
 git clone https://github.com/krishnaChandak044/Blackbox-meta-ai-global-hackathon.git
 cd Blackbox-meta-ai-global-hackathon
+cp .env.example .env
+# Set SECRET_KEY (32+ random characters) and BLACKBOX_ACCESS_PASSWORD in .env
+make setup
+make dev
+# Open http://localhost:3000/login
 ```
 
 ---

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -44,7 +44,7 @@ export default function CaseDetailPage() {
   const [integrity, setIntegrity] = useState<Record<string, IntegrityCheck>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     try {
       const [c, m, j] = await Promise.all([
         casesApi.get(id),
@@ -57,9 +57,9 @@ export default function CaseDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
-  useEffect(() => { refresh(); }, [id]);
+  useEffect(() => { refresh(); }, [refresh]);
 
   const handleFiles = async (files: FileList | File[]) => {
     const arr = Array.from(files).filter(f => f.type.startsWith("video/"));
@@ -287,6 +287,8 @@ export default function CaseDetailPage() {
                             )}
                           </td>
                           <td>
+                            <button className="btn btn-ghost btn-sm" onClick={() => mediaApi.downloadOriginal(id, m.id, m.original_filename)}>Download original</button>
+                            {m.status === "failed" && <button className="btn btn-ghost btn-sm" onClick={async () => { await mediaApi.retry(id, m.id); await refresh(); }}>Retry processing</button>}
                             <button
                               className="btn btn-danger btn-sm"
                               onClick={() => deleteMedia(m)}

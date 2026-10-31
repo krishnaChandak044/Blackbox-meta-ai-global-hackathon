@@ -1,16 +1,15 @@
 """Cases CRUD router — full Phase 1 implementation."""
 
-from datetime import datetime
-from typing import Optional
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from services.api.db.models import Case, CaseStatus, DerivedArtifact, SourceMedia
 from services.api.db.session import get_db
-from services.api.db.models import Case, CaseStatus, SourceMedia
-from services.api.schemas.case import CaseCreate, CaseUpdate, CaseResponse
+from services.api.schemas.case import CaseCreate, CaseResponse, CaseUpdate
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 
@@ -49,9 +48,7 @@ async def list_cases(db: AsyncSession = Depends(get_db)) -> list[CaseResponse]:
 
     responses = []
     for case in cases:
-        mc_result = await db.execute(
-            select(func.count()).where(SourceMedia.case_id == case.id)
-        )
+        mc_result = await db.execute(select(func.count()).where(SourceMedia.case_id == case.id))
         media_count = mc_result.scalar() or 0
         r = CaseResponse.model_validate(case)
         r.media_count = media_count
@@ -66,9 +63,7 @@ async def get_case(case_id: str, db: AsyncSession = Depends(get_db)) -> CaseResp
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
 
-    mc_result = await db.execute(
-        select(func.count()).where(SourceMedia.case_id == case_id)
-    )
+    mc_result = await db.execute(select(func.count()).where(SourceMedia.case_id == case_id))
     media_count = mc_result.scalar() or 0
     r = CaseResponse.model_validate(case)
     r.media_count = media_count
@@ -102,5 +97,15 @@ async def delete_case(case_id: str, db: AsyncSession = Depends(get_db)) -> None:
     case = result.scalar_one_or_none()
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
+    media_result = await db.execute(select(SourceMedia).where(SourceMedia.case_id == case_id))
+    media_rows = media_result.scalars().all()
+    paths = [Path(media.storage_path) for media in media_rows]
+    for media in media_rows:
+        artifacts_result = await db.execute(
+            select(DerivedArtifact).where(DerivedArtifact.source_media_id == media.id)
+        )
+        paths.extend(Path(artifact.storage_path) for artifact in artifacts_result.scalars().all())
     await db.delete(case)
     await db.commit()
+    for path in paths:
+        path.unlink(missing_ok=True)

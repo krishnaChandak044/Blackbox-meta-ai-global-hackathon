@@ -1,6 +1,3 @@
-# Docs (internal planning documents)
-/docs/
-
 # OS
 .DS_Store
 Thumbs.db
@@ -55,3 +52,10 @@ dist/
 out/
 .next/
 .nuxt/
+*.tsbuildinfo
+
+# Local evidence and generated test artifacts
+storage/
+blackbox.db
+.coverage
+htmlcov/

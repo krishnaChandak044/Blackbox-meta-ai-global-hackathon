@@ -192,7 +192,7 @@ export default function NewCasePage() {
                         I confirm I have the right to upload this footage
                       </div>
                       <div className="text-sm text-secondary">
-                        The footage does not contain material that violates anyone's rights.
+                        The footage does not contain material that violates anyone&apos;s rights.
                         I understand Blackbox stores original bytes and logs all processing.
                       </div>
                     </div>
