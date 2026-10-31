@@ -1,14 +1,14 @@
 "use client";
 import { useCallback, useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { mediaApi, transcriptsApi } from "@/lib/api";
+import { jobsApi, mediaApi, transcriptsApi } from "@/lib/api";
 import type { SourceMedia, Transcript, DiarisedSegment } from "@/lib/api";
 const SPC:Record<string,string>={witness_1:"var(--sage)",driver:"var(--sky)",officer:"var(--sand)"};
 export default function TP({params}:{params:{id:string}}){
   const id=params.id;const [media,setMedia]=useState<SourceMedia[]>([]);const [trs,setTrs]=useState<Transcript[]>([]);const [sel,setSel]=useState<Transcript|null>(null);const [loading,setLoading]=useState(true);const [err,setErr]=useState<string|null>(null);const [busy,setBusy]=useState<string|null>(null);const [raw,setRaw]=useState("");const [curT,setCurT]=useState(0);const vref=useRef<HTMLVideoElement>(null);
   const refresh=useCallback(async()=>{try{const [m,t]=await Promise.all([mediaApi.list(id),transcriptsApi.list(id)]);setMedia(m);setTrs(t);if(t.length&&!sel) setSel(t[0]);}catch(e:any){setErr((e as Error).message);}finally{setLoading(false);}},[id]);
   useEffect(()=>{refresh();},[refresh]);
-  const doTr=async(mid:string)=>{setBusy(mid);try{await transcriptsApi.transcribe(id,mid);for(let i=0;i<5;i++){await new Promise(r=>setTimeout(r,900));await refresh();}}catch(e:any){setErr((e as Error).message);}finally{setBusy(null);}};
+  const doTr=async(mid:string)=>{setBusy(mid);try{const {job_id}=await transcriptsApi.transcribe(id,mid);const deadline=Date.now()+120000;while(Date.now()<deadline){const job=await jobsApi.get(job_id);if(job.status==="done"){await refresh();return;}if(job.status==="failed")throw new Error(job.error_message||"Transcription failed");await new Promise(r=>setTimeout(r,1500));}throw new Error("Transcription is still running. Refresh the page later.");}catch(e:any){setErr((e as Error).message);}finally{setBusy(null);}};
   const doCreate=async()=>{if(!raw.trim())return;try{await transcriptsApi.create(id,{raw_text:raw.trim()} as any);setRaw("");await refresh();}catch(e:any){setErr((e as Error).message);}};
   const segs:DiarisedSegment[]=(()=>{if(!sel?.diarised_json) return [];try{return JSON.parse(sel.diarised_json);}catch{return []}})();
   const seek=(t:number)=>{if(vref.current) vref.current.currentTime=t;setCurT(t);};

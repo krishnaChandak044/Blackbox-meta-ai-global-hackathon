@@ -192,7 +192,6 @@ async def patch_claim(
             speaker=row.speaker,
         )
         if new_claims:
-            best = max(new_claims, key=lambda c: c.confidence)
             assertions_data = [
                 {
                     "assertion_type": a.assertion_type,
@@ -204,30 +203,37 @@ async def patch_claim(
                     "source_ts_start": a.source_ts_start,
                     "source_ts_end": a.source_ts_end,
                 }
-                for a in best.assertions
+                for extracted in new_claims
+                for a in extracted.assertions
             ]
             row.assertions_json = json.dumps(assertions_data)
-            row.extraction_confidence = best.confidence
+            row.extraction_confidence = max(c.confidence for c in new_claims)
+            # Claim assertion timestamps came from ASR segments; retain their
+            # bounds when only the displayed claim text is edited.
         else:
             row.assertions_json = "[]"
             row.extraction_confidence = 0.0
 
         row.assertions_edited_at = now
 
-        # Invalidate all prior verdicts for this claim so the UI prompts re-check
+    if "speaker" in updates and updates["speaker"] is not None:
+        # Keep assertion subject labels separate; the claim-level speaker is the
+        # diarisation/editor attribution, not an inferred vehicle identity.
+        row.speaker = updates["speaker"]
+
+    if updates:
+        # Any material edit changes attribution/context and invalidates checks.
         stale_checks = (
-            await db.execute(
-                select(ClaimCheck).where(ClaimCheck.claim_id == claim_id)
-            )
+            await db.execute(select(ClaimCheck).where(ClaimCheck.claim_id == claim_id))
         ).scalars().all()
         for check in stale_checks:
             check.verdict = "stale_edit"
             check.explanation = (
-                f"[INVALIDATED] Claim text was edited at {now.isoformat()} by {user}. "
+                f"[INVALIDATED] Claim edited at {now.isoformat()} by {user}. "
                 "Re-run the check to get a fresh verdict."
             )
-
         row.verdict_invalidated_at = now
+
 
     await db.commit()
     await db.refresh(row)

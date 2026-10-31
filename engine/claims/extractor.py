@@ -92,8 +92,6 @@ def _extract_speed_value(match: re.Match[str]) -> tuple[float | None, str | None
         except ValueError:
             pass
     unit = _normalise_unit(raw_unit) if raw_unit else None
-    if value is not None and unit is None:
-        unit = "km/h"
     return value, unit
 def _sentences(text: str) -> list[tuple[str, int, int]]:
     results: list[tuple[str, int, int]] = []

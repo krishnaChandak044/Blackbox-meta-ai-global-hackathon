@@ -9,8 +9,7 @@ Key correctness rules:
 1. Speed is computed PER-VEHICLE — tracks are never mixed.
    The vehicle whose time window overlaps the assertion is selected first.
 2. All unit conversions are made explicit in explanations (km/h).
-3. Confidence is derived from the ratio of overlapping evidence to the
-   assertion window, not a fixed constant.
+3. Coverage values describe evidence quantity, not verdict probability.
 4. Time-window filtering: only track points whose presentation_ts_s falls
    within [assertion.source_ts_start, assertion.source_ts_end] are used.
    If the window is 0-length, the full track is used (backward compat).
@@ -19,6 +18,7 @@ Key correctness rules:
 from __future__ import annotations
 
 import math
+import re
 from datetime import datetime, timezone
 
 from engine.claims.models import Claim, ClaimAssertion, ClaimVerdict, TrackDetailLite, TrackPointLite
@@ -26,7 +26,7 @@ from engine.claims.models import Claim, ClaimAssertion, ClaimVerdict, TrackDetai
 # ── Tunable thresholds ────────────────────────────────────────────────────────
 SPEED_SUPPORT_TOL = 0.20    # ±20% → supported
 SPEED_CONTRADICT_TOL = 0.40  # >40% → contradicted; between = inconclusive
-STOP_DISPLACEMENT_M = 0.5   # max inter-frame displacement for a "stopped" claim
+STOP_MIN_DURATION_S = 0.5
 DIRECTION_TOL_DEG = 45.0    # ±45° of claimed compass bearing
 
 # Minimum number of consecutive world-point pairs to trust a speed estimate
@@ -37,7 +37,6 @@ DIRECTION_BEARINGS: dict[str, float] = {
     "south": 180.0, "southbound": 180.0,
     "east": 90.0, "eastbound": 90.0,
     "west": 270.0, "westbound": 270.0,
-    "left": 270.0, "right": 90.0,
     "straight": 0.0, "forward": 0.0, "straight ahead": 0.0,
     "north-east": 45.0, "northeast": 45.0,
     "south-east": 135.0, "southeast": 135.0,
@@ -51,8 +50,7 @@ DIRECTION_BEARINGS: dict[str, float] = {
 def _to_kmh(value: float, unit: str | None) -> float:
     """Convert a claimed speed value to km/h for comparison."""
     if unit is None:
-        # Default assumption: km/h (most witness statements use km/h)
-        return value
+        raise ValueError("Speed unit is unknown")
     u = unit.lower().strip()
     if u in ("km/h", "kph", "kmph", "kilometres per hour", "kilometers per hour"):
         return value
@@ -60,8 +58,7 @@ def _to_kmh(value: float, unit: str | None) -> float:
         return value * 1.60934
     if u in ("m/s", "ms", "metres per second", "meters per second"):
         return value * 3.6
-    # Unknown unit — return as-is but flag in explanation
-    return value
+    raise ValueError(f"Unsupported speed unit: {unit}")
 
 
 # ── Time-window filtering ─────────────────────────────────────────────────────
@@ -140,7 +137,7 @@ def _best_speed_estimate(
         if not window_pts and ts_start != 0.0:
             continue
         pts_to_use = window_pts if window_pts else track.points
-        world_count = sum(1 for p in pts_to_use if p.world_x is not None)
+        world_count = sum(1 for p in pts_to_use if p.world_x is not None and p.world_y is not None)
         if world_count > best_point_count:
             best_point_count = world_count
             kmh, wpos, f0, f1 = _speed_for_single_track(pts_to_use)
@@ -187,18 +184,9 @@ def _bearing_from_track(
 
 # ── Evidence confidence ───────────────────────────────────────────────────────
 
-def _evidence_confidence(n_pairs: int) -> float:
-    """
-    Confidence derived from the number of consecutive world-point pairs
-    used to compute the speed. More pairs → higher confidence, capped at 0.90.
-    """
-    if n_pairs < 2:
-        return 0.40
-    if n_pairs < 5:
-        return 0.65
-    if n_pairs < 15:
-        return 0.80
-    return 0.90
+def _data_coverage(n_pairs: int, expected_pairs: int = 15) -> float:
+    """Evidence coverage score; this is not a probability of verdict correctness."""
+    return min(1.0, max(0.0, n_pairs / expected_pairs))
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────
@@ -259,7 +247,7 @@ def check_claim(
             return ClaimVerdict(
                 claim_id=claim.id,
                 verdict="insufficient_data",
-                confidence=0.95,
+                confidence=0.0,
                 evidence_frame_start=None,
                 evidence_frame_end=None,
                 evidence_world_positions=None,
@@ -274,7 +262,7 @@ def check_claim(
             return ClaimVerdict(
                 claim_id=claim.id,
                 verdict="inconclusive",
-                confidence=0.5,
+                confidence=0.0,
                 evidence_frame_start=None,
                 evidence_frame_end=None,
                 evidence_world_positions=None,
@@ -283,7 +271,19 @@ def check_claim(
             )
 
         # Convert claimed speed to km/h for a consistent comparison
-        claimed_kmh = _to_kmh(primary.value, primary.unit)
+        try:
+            claimed_kmh = _to_kmh(primary.value, primary.unit)
+        except ValueError as exc:
+            return ClaimVerdict(
+                claim_id=claim.id,
+                verdict="insufficient_data",
+                confidence=0.0,
+                evidence_frame_start=None,
+                evidence_frame_end=None,
+                evidence_world_positions=None,
+                explanation=f"Speed cannot be checked: {exc}. Specify a supported unit.",
+                checked_at=now,
+            )
         unit_label = primary.unit or "km/h"
 
         kmh, wpos, f0, f1, track_id = _best_speed_estimate(tracks, primary)
@@ -292,7 +292,7 @@ def check_claim(
             return ClaimVerdict(
                 claim_id=claim.id,
                 verdict="inconclusive",
-                confidence=0.5,
+                confidence=0.0,
                 evidence_frame_start=f0,
                 evidence_frame_end=f1,
                 evidence_world_positions=wpos or None,
@@ -314,12 +314,12 @@ def check_claim(
             world_in_window = [p for p in pts_used if p.world_x is not None]
             n_pairs = max(0, len(world_in_window) - 1)
 
-        conf = _evidence_confidence(n_pairs)
+        conf = _data_coverage(n_pairs)
 
         if rel_err <= SPEED_SUPPORT_TOL:
             verdict = "supported"
             expl = (
-                f"Speed claim of {primary.value:.0f} {unit_label} is supported. "
+                f"Speed claim of {primary.value:.0f} {unit_label} is supported by the available track data. "
                 f"Measured median speed: {kmh:.1f} km/h "
                 f"(relative error {rel_err:.0%}, within ±{SPEED_SUPPORT_TOL:.0%} tolerance). "
                 f"Evidence from {n_pairs} consecutive frame pairs on track {track_id[:8]}."
@@ -327,7 +327,7 @@ def check_claim(
         elif rel_err > SPEED_CONTRADICT_TOL:
             verdict = "contradicted"
             expl = (
-                f"Speed claim of {primary.value:.0f} {unit_label} is contradicted. "
+                f"Speed claim of {primary.value:.0f} {unit_label} conflicts with the available track data. "
                 f"Measured median speed: {kmh:.1f} km/h "
                 f"(relative error {rel_err:.0%} exceeds ±{SPEED_CONTRADICT_TOL:.0%}). "
                 f"Evidence from {n_pairs} consecutive frame pairs on track {track_id[:8]}."
@@ -400,13 +400,27 @@ def check_claim(
             )
 
         wpos = [(p.world_x, p.world_y) for p in world_pts]  # type: ignore[misc]
-        max_disp = 0.0
+        # A stop is a low-speed interval, not zero movement across the whole window.
+        stop_intervals: list[float] = []
+        interval_start: float | None = None
+        interval_end: float | None = None
         for i in range(1, len(world_pts)):
+            dt = world_pts[i].presentation_ts_s - world_pts[i - 1].presentation_ts_s
+            if dt <= 0:
+                continue
             dx = world_pts[i].world_x - world_pts[i - 1].world_x  # type: ignore[operator]
             dy = world_pts[i].world_y - world_pts[i - 1].world_y  # type: ignore[operator]
-            max_disp = max(max_disp, math.sqrt(dx * dx + dy * dy))
-
-        is_stopped = max_disp < STOP_DISPLACEMENT_M
+            if math.hypot(dx, dy) / dt < 0.25:
+                if interval_start is None:
+                    interval_start = world_pts[i - 1].presentation_ts_s
+                interval_end = world_pts[i].presentation_ts_s
+            else:
+                if interval_start is not None and interval_end is not None:
+                    stop_intervals.append(interval_end - interval_start)
+                interval_start = interval_end = None
+        if interval_start is not None and interval_end is not None:
+            stop_intervals.append(interval_end - interval_start)
+        is_stopped = max(stop_intervals, default=0.0) >= STOP_MIN_DURATION_S
         f0 = world_pts[0].frame_index
         f1 = world_pts[-1].frame_index
 
@@ -414,13 +428,13 @@ def check_claim(
             return ClaimVerdict(
                 claim_id=claim.id,
                 verdict="supported",
-                confidence=0.80,
+                confidence=min(1.0, max(stop_intervals, default=0.0) / 2.0),
                 evidence_frame_start=f0,
                 evidence_frame_end=f1,
                 evidence_world_positions=wpos,
                 explanation=(
-                    f"Stop claim is supported: maximum inter-frame displacement is {max_disp:.2f} m "
-                    f"(threshold {STOP_DISPLACEMENT_M} m) — object appears stationary."
+                f"Stop claim is supported by a low-speed interval lasting "
+                f"{max(stop_intervals):.2f} seconds (minimum {STOP_MIN_DURATION_S:.2f} seconds)."
                 ),
                 checked_at=now,
             )
@@ -428,13 +442,12 @@ def check_claim(
             return ClaimVerdict(
                 claim_id=claim.id,
                 verdict="contradicted",
-                confidence=0.80,
+                confidence=min(1.0, len(world_pts) / 15.0),
                 evidence_frame_start=f0,
                 evidence_frame_end=f1,
                 evidence_world_positions=wpos,
                 explanation=(
-                    f"Stop claim is contradicted: maximum inter-frame displacement is {max_disp:.2f} m "
-                    f"(threshold {STOP_DISPLACEMENT_M} m) — object is moving."
+                f"No low-speed interval of at least {STOP_MIN_DURATION_S:.2f} seconds was observed in the available window."
                 ),
                 checked_at=now,
             )
@@ -442,6 +455,18 @@ def check_claim(
     # ── Direction ─────────────────────────────────────────────────────────────
     elif atype == "direction":
         # Try to extract the claimed bearing from the raw assertion text
+        relative_text = primary.raw_text.lower()
+        if re.search(r"\b(left|right)\b", relative_text):
+            return ClaimVerdict(
+                claim_id=claim.id,
+                verdict="inconclusive",
+                confidence=0.0,
+                evidence_frame_start=None,
+                evidence_frame_end=None,
+                evidence_world_positions=None,
+                explanation="Relative left/right direction needs a defined viewpoint; no compass verdict was produced.",
+                checked_at=now,
+            )
         claimed_bearing = _direction_to_bearing(primary.raw_text)
         if claimed_bearing is None:
             claimed_bearing = _direction_to_bearing(primary.subject)
@@ -455,18 +480,32 @@ def check_claim(
                 evidence_world_positions=None,
                 explanation=(
                     f"Could not map direction assertion '{primary.raw_text}' to a compass bearing. "
-                    "Supported keywords: north, south, east, west, left, right, straight, northeast, etc."
+                    "Supported keywords: north, south, east, west, straight, northeast, etc."
                 ),
                 checked_at=now,
             )
 
-        # Find the track with best coverage in the window
+        # The direction sentence may concern a particular subject; without a
+        # track binding, multiple candidate tracks are ambiguous. Abstain.
+        if len(tracks) != 1:
+            return ClaimVerdict(
+                claim_id=claim.id,
+                verdict="inconclusive",
+                confidence=0.0,
+                evidence_frame_start=None,
+                evidence_frame_end=None,
+                evidence_world_positions=None,
+                explanation="Direction cannot be attributed to one vehicle because the claim is not linked to a specific track.",
+                checked_at=now,
+            )
+
+        # A single track is required until claims can explicitly identify tracks.
         best_bearing = None
         best_wpos: list[tuple[float, float]] = []
         best_f0 = best_f1 = None
         best_count = 0
 
-        for track in tracks:
+        for track in tracks[:1]:
             bearing, wpos, f0, f1 = _bearing_from_track(track, primary)
             if bearing is not None:
                 c = len(wpos)
@@ -496,7 +535,7 @@ def check_claim(
             return ClaimVerdict(
                 claim_id=claim.id,
                 verdict="supported",
-                confidence=0.75,
+                confidence=min(1.0, best_count / 15.0),
                 evidence_frame_start=best_f0,
                 evidence_frame_end=best_f1,
                 evidence_world_positions=best_wpos or None,
@@ -511,7 +550,7 @@ def check_claim(
             return ClaimVerdict(
                 claim_id=claim.id,
                 verdict="contradicted",
-                confidence=0.75,
+                confidence=min(1.0, best_count / 15.0),
                 evidence_frame_start=best_f0,
                 evidence_frame_end=best_f1,
                 evidence_world_positions=best_wpos or None,

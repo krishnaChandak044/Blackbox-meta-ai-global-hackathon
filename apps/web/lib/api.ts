@@ -164,6 +164,7 @@ export const jobsApi = {
   get: (jobId: string) => req<Job>(`/jobs/${jobId}`),
 };
 
+
 /* ── Helpers ──────────────────────────────────────────────────────────────── */
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -300,7 +301,7 @@ export interface DiarisedSegment { speaker: string; start: number; end: number; 
 export interface Transcript { id: string; case_id: string; media_id: string | null; speaker_count: number; language: string; raw_text: string; diarised_json: string | null; transcription_model: string; word_count: number; duration_seconds: number | null; created_at: string; }
 export interface ClaimAssertion { assertion_type: string; subject: string; value: number | null; unit: string | null; qualifier: string | null; raw_text: string; source_ts_start: number; source_ts_end: number; }
 export interface TranscriptClaim { id: string; transcript_id: string; case_id: string; speaker: string; raw_text: string; assertions: ClaimAssertion[]; extraction_confidence: number; source_ts_start: number; source_ts_end: number; created_at: string; }
-export interface ClaimVerdict { id: string; claim_id: string; verdict: string; confidence: number; evidence_frame_start: number | null; evidence_frame_end: number | null; evidence_json: string | null; explanation: string; checked_at: string; }
+export interface ClaimVerdict { id: string; claim_id: string; case_id: string; verdict: string; confidence: number; evidence_frame_start: number | null; evidence_frame_end: number | null; evidence_json: string | null; explanation: string; homography_fit_id: string | null; checked_at: string; checked_by: string; }
 export const transcriptsApi = {
   list: (caseId: string) => req<Transcript[]>(`/cases/${caseId}/transcripts/`),
   get: (caseId: string, id: string) => req<Transcript>(`/cases/${caseId}/transcripts/${id}`),

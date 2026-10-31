@@ -92,6 +92,16 @@ class MuseVoiceAdapter:
         self.api_url = (api_url or os.getenv("MUSE_VOICE_API_URL", "")).rstrip("/")
         self.api_key = api_key or os.getenv("MUSE_VOICE_API_KEY", "")
 
+    @staticmethod
+    def _endpoint(base_url: str) -> str:
+        """Resolve a configured service URL without silently duplicating routes.
+
+        Configure either the transcription endpoint itself or a base URL ending
+        in `/v1/muse/voice`; in the latter case `/transcribe` is appended.
+        """
+        base = base_url.rstrip("/")
+        return base if base.endswith("/transcribe") else f"{base}/transcribe"
+
     def _ensure_available(self) -> None:
         if not self.api_key:
             raise AdapterUnavailable("MUSE_VOICE_API_KEY is not set")
@@ -136,10 +146,16 @@ class MuseVoiceAdapter:
         headers = {"Authorization": f"Bearer {self.api_key}"}
         try:
             with open(audio_path, "rb") as fh:
-                # Send as audio/wav regardless of actual format — the extracted file is always WAV
-                files = {"file": (pathlib.Path(audio_path).name, fh, "audio/wav")}
+                suffix = pathlib.Path(audio_path).suffix.lower()
+                content_type = "audio/wav" if suffix == ".wav" else {
+                    ".mp3": "audio/mpeg", ".flac": "audio/flac", ".ogg": "audio/ogg",
+                    ".m4a": "audio/mp4", ".aac": "audio/aac", ".opus": "audio/opus",
+                }.get(suffix)
+                if content_type is None:
+                    raise AdapterUnavailable(f"Unsupported audio format: {suffix or 'unknown'}")
+                files = {"file": (pathlib.Path(audio_path).name, fh, content_type)}
                 resp = httpx.post(
-                    f"{self.api_url}/transcribe",
+                    self._endpoint(self.api_url),
                     files=files,
                     headers=headers,
                     timeout=300.0,   # large files can take time
@@ -158,6 +174,8 @@ class MuseVoiceAdapter:
             raise AdapterUnavailable(f"Unexpected API response type: {type(data)}")
 
         segments: list[dict] = data.get("segments") or data.get("diarised") or []
+        if not isinstance(segments, list) or any(not isinstance(s, dict) for s in segments):
+            raise AdapterUnavailable("Muse Voice response contains malformed segments")
         raw_text: str = (
             data.get("text")
             or " ".join(s.get("text", "") for s in segments)
@@ -183,6 +201,13 @@ class MuseVoiceAdapter:
         """
         out = []
         for s in raw:
+            try:
+                start = float(s.get("start", 0))
+                end = float(s.get("end", 0))
+            except (TypeError, ValueError) as exc:
+                raise AdapterUnavailable("Muse Voice returned invalid segment timestamps") from exc
+            if start < 0 or end < start:
+                raise AdapterUnavailable("Muse Voice returned an invalid segment time range")
             speaker = (
                 s.get("speaker")
                 or s.get("speaker_label")
@@ -191,8 +216,8 @@ class MuseVoiceAdapter:
             )
             out.append({
                 "speaker": str(speaker),
-                "start": float(s.get("start", 0)),
-                "end": float(s.get("end", 0)),
+                "start": start,
+                "end": end,
                 "text": str(s.get("text", s.get("content", ""))).strip(),
             })
         return out
