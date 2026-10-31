@@ -388,3 +388,65 @@ class TrackPointRow(Base):
     is_human_corrected: Mapped[bool] = mapped_column(Boolean, default=False)
 
     track: Mapped["ObjectTrack"] = relationship("ObjectTrack", back_populates="points")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Phase 3 — Language & Claims
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+class Transcript(Base):
+    __tablename__ = "transcripts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"))
+    media_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("source_media.id", ondelete="SET NULL"), nullable=True)
+    speaker_count: Mapped[int] = mapped_column(Integer, default=1)
+    language: Mapped[str] = mapped_column(String(10), default="en")
+    raw_text: Mapped[str] = mapped_column(Text)
+    diarised_json: Mapped[str | None] = mapped_column(Text)
+    transcription_model: Mapped[str] = mapped_column(String(100), default="manual")
+    word_count: Mapped[int] = mapped_column(Integer, default=0)
+    duration_seconds: Mapped[float | None] = mapped_column(Float)
+    # is_synthetic=True means the text was machine-generated (not real audio)
+    # Claims derived from synthetic transcripts must not be treated as evidence.
+    is_synthetic: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    created_by: Mapped[str] = mapped_column(String(100), default="system")
+
+
+class TranscriptClaim(Base):
+    __tablename__ = "transcript_claims"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    transcript_id: Mapped[str] = mapped_column(String(36), ForeignKey("transcripts.id", ondelete="CASCADE"))
+    case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"))
+    media_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("source_media.id", ondelete="SET NULL"), nullable=True)
+    speaker: Mapped[str] = mapped_column(String(100), default="witness_1")
+    raw_text: Mapped[str] = mapped_column(Text)
+    assertions_json: Mapped[str] = mapped_column(Text)
+    extraction_confidence: Mapped[float] = mapped_column(Float, default=0.5)
+    source_ts_start: Mapped[float] = mapped_column(Float, default=0.0)
+    source_ts_end: Mapped[float] = mapped_column(Float, default=0.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    created_by: Mapped[str] = mapped_column(String(100), default="system")
+    # When raw_text is edited, assertions are re-extracted and old verdicts are invalidated
+    assertions_edited_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    verdict_invalidated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    edit_history_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON list of {ts, field, old, new, by}
+
+
+class ClaimCheck(Base):
+    __tablename__ = "claim_checks"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    claim_id: Mapped[str] = mapped_column(String(36), ForeignKey("transcript_claims.id", ondelete="CASCADE"))
+    case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"))
+    verdict: Mapped[str] = mapped_column(String(30))
+    confidence: Mapped[float] = mapped_column(Float, default=0.5)
+    evidence_frame_start: Mapped[int | None] = mapped_column(Integer)
+    evidence_frame_end: Mapped[int | None] = mapped_column(Integer)
+    evidence_json: Mapped[str | None] = mapped_column(Text)
+    explanation: Mapped[str] = mapped_column(Text)
+    homography_fit_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("homography_fits.id", ondelete="SET NULL"), nullable=True)
+    checked_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    checked_by: Mapped[str] = mapped_column(String(100), default="system")

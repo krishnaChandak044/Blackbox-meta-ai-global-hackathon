@@ -419,10 +419,16 @@ function SidebarShell({ caseId, kaseTitle }: { caseId: string; kaseTitle?: strin
               <span className="nav-item-icon">🔍</span>
               <span className="truncate" style={{ maxWidth: 160 }}>{kaseTitle}</span>
             </Link>
+            <Link href={`/cases/${caseId}/transcripts`} className="nav-item">
+              <span className="nav-item-icon">💬</span> Transcripts
+            </Link>
+            <Link href={`/cases/${caseId}/claims`} className="nav-item">
+              <span className="nav-item-icon">⚖️</span> Claims
+            </Link>
           </>
         )}
       </nav>
-      <div className="sidebar-footer">Phase 1 · Evidence Foundation</div>
+      <div className="sidebar-footer">Phase 3 · Language &amp; Claims</div>
     </aside>
   );
 }

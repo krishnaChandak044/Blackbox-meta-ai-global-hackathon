@@ -164,6 +164,7 @@ export const jobsApi = {
   get: (jobId: string) => req<Job>(`/jobs/${jobId}`),
 };
 
+
 /* ── Helpers ──────────────────────────────────────────────────────────────── */
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -293,6 +294,29 @@ export const calibrationApi = {
 
   getActiveFit: (caseId: string, mediaId: string) =>
     req<HomographyFit | null>(`/cases/${caseId}/media/${mediaId}/calibration/fit`),
+};
+
+/* ── Phase 3 — Transcripts & Claims ──────────────────────────────────────── */
+export interface DiarisedSegment { speaker: string; start: number; end: number; text: string; }
+export interface Transcript { id: string; case_id: string; media_id: string | null; speaker_count: number; language: string; raw_text: string; diarised_json: string | null; transcription_model: string; word_count: number; duration_seconds: number | null; created_at: string; }
+export interface ClaimAssertion { assertion_type: string; subject: string; value: number | null; unit: string | null; qualifier: string | null; raw_text: string; source_ts_start: number; source_ts_end: number; }
+export interface TranscriptClaim { id: string; transcript_id: string; case_id: string; speaker: string; raw_text: string; assertions: ClaimAssertion[]; extraction_confidence: number; source_ts_start: number; source_ts_end: number; created_at: string; }
+export interface ClaimVerdict { id: string; claim_id: string; case_id: string; verdict: string; confidence: number; evidence_frame_start: number | null; evidence_frame_end: number | null; evidence_json: string | null; explanation: string; homography_fit_id: string | null; checked_at: string; checked_by: string; }
+export const transcriptsApi = {
+  list: (caseId: string) => req<Transcript[]>(`/cases/${caseId}/transcripts/`),
+  get: (caseId: string, id: string) => req<Transcript>(`/cases/${caseId}/transcripts/${id}`),
+  create: (caseId: string, body: { raw_text: string; language?: string; media_id?: string }) => req<Transcript>(`/cases/${caseId}/transcripts/`, { method: "POST", body: JSON.stringify(body) }),
+  delete: (caseId: string, id: string) => fetch(`${V1}/cases/${caseId}/transcripts/${id}`, { method: "DELETE", credentials: "include" }),
+  transcribe: (caseId: string, mediaId: string) => req<{ job_id: string }>(`/cases/${caseId}/transcripts/media/${mediaId}/transcribe`, { method: "POST" }),
+};
+export const claimsApi = {
+  list: (caseId: string) => req<TranscriptClaim[]>(`/cases/${caseId}/claims/`),
+  get: (caseId: string, claimId: string) => req<TranscriptClaim>(`/cases/${caseId}/claims/${claimId}`),
+  extract: (caseId: string, transcriptId: string) => req<{ job_id: string }>(`/cases/${caseId}/claims/extract/${transcriptId}`, { method: "POST" }),
+  check: (caseId: string, claimId: string) => req<ClaimVerdict>(`/cases/${caseId}/claims/${claimId}/check`, { method: "POST" }),
+  getCheck: (caseId: string, claimId: string) => req<ClaimVerdict | null>(`/cases/${caseId}/claims/${claimId}/check`),
+  update: (caseId: string, claimId: string, body: { raw_text?: string; speaker?: string }) => req<TranscriptClaim>(`/cases/${caseId}/claims/${claimId}`, { method: "PATCH", body: JSON.stringify(body) }),
+  delete: (caseId: string, claimId: string) => fetch(`${V1}/cases/${caseId}/claims/${claimId}`, { method: "DELETE", credentials: "include" }),
 };
 
 /* ── Tracks API ───────────────────────────────────────────────────────────── */
