@@ -133,10 +133,12 @@ def _run(db: Session, media_id: str, job: ProcessingJob) -> dict:
         )
 
         # Build world lookup for fast access
-        world_by_frame: dict[int, tuple[float, float, float]] = {}
+        world_by_frame: dict[int, tuple[float, float, float, float]] = {}
         if ground_traj:
             for gp in ground_traj.positions:
-                world_by_frame[gp.frame_index] = (gp.world.x, gp.world.y, gp.sigma_m)
+                world_by_frame[gp.frame_index] = (
+                    gp.world.x, gp.world.y, gp.sigma_m, gp.u_pixel_localisation
+                )
 
         ot = ObjectTrack(
             id=str(uuid.uuid4()),
@@ -155,7 +157,7 @@ def _run(db: Session, media_id: str, job: ProcessingJob) -> dict:
 
         for tp in raw_track.points:
             gx, gy = tp.bbox.ground_contact_px
-            wx, wy, sig = world_by_frame.get(tp.frame_index, (None, None, None))
+            wx, wy, sig, pixel_sigma = world_by_frame.get(tp.frame_index, (None, None, None, None))
             db.add(
                 TrackPointRow(
                     track_id=ot.id,
@@ -170,6 +172,7 @@ def _run(db: Session, media_id: str, job: ProcessingJob) -> dict:
                     world_x=wx,
                     world_y=wy,
                     sigma_m=sig,
+                    pixel_localisation_sigma_m=pixel_sigma,
                     detection_confidence=tp.detection_confidence,
                     is_interpolated=tp.is_interpolated,
                     is_human_corrected=tp.is_human_corrected,
