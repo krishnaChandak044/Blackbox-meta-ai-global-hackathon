@@ -125,6 +125,12 @@ Aggregates consented, anonymized cases at the same junction to identify recurrin
 
 > Phase 1 requires a private access password and starts media probing after upload. See the commands below.
 
+Phase 2 adds a fixed-camera OpenCV motion baseline, human track confirmation,
+and anchor-based ground-plane calibration. Motion regions are labeled `unknown`;
+they are not SAM detections or verified vehicle identities. Use a stationary camera,
+review each track, and add a measured distance before using metric positions.
+The full reconstruction, counterfactual, and 3D pipeline remains planned work.
+
 ```bash
 git clone https://github.com/krishnaChandak044/Blackbox-meta-ai-global-hackathon.git
 cd Blackbox-meta-ai-global-hackathon

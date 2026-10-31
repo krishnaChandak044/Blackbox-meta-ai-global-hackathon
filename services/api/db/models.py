@@ -142,6 +142,15 @@ class SourceMedia(Base):
     derived_artifacts: Mapped[list["DerivedArtifact"]] = relationship(
         "DerivedArtifact", back_populates="source_media", cascade="all, delete-orphan"
     )
+    calibration_anchors: Mapped[list["CalibrationAnchor"]] = relationship(
+        "CalibrationAnchor", cascade="all, delete-orphan"
+    )
+    homography_fits: Mapped[list["HomographyFit"]] = relationship(
+        "HomographyFit", cascade="all, delete-orphan"
+    )
+    object_tracks: Mapped[list["ObjectTrack"]] = relationship(
+        "ObjectTrack", cascade="all, delete-orphan"
+    )
 
 
 # ── Derived Artifact ──────────────────────────────────────────────────────────
