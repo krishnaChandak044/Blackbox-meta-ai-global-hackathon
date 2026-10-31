@@ -15,7 +15,7 @@ dependencies = [
     "pydantic-settings>=2.2.0",
 
     # Database
-    "sqlalchemy>=2.0.0",
+    "sqlalchemy[asyncio]>=2.0.0",
     "alembic>=1.13.0",
     "asyncpg>=0.29.0",          # Postgres async driver
     "aiosqlite>=0.20.0",        # SQLite async (dev/test)
@@ -72,8 +72,8 @@ build-backend = "hatchling.build"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-select = ["E", "F", "I", "N", "UP", "B", "SIM", "ANN"]
-ignore = ["ANN101", "ANN102"]
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -82,5 +82,9 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["services", "engine", "evaluation"]
 addopts = "--cov=. --cov-report=term-missing"
+
+[tool.hatch.build.targets.wheel]
+packages = ["services", "engine"]

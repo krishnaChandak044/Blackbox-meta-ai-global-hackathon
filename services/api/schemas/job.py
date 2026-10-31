@@ -2,8 +2,10 @@
 
 from datetime import datetime
 from typing import Optional
+
 from pydantic import BaseModel
-from services.api.db.models import JobStatus, JobStage
+
+from services.api.db.models import JobStage, JobStatus
 
 
 class JobResponse(BaseModel):

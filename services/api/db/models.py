@@ -30,6 +30,7 @@ class Base(DeclarativeBase):
 
 # ── Enums ─────────────────────────────────────────────────────────────────────
 
+
 class CaseStatus(str, enum.Enum):
     DRAFT = "draft"
     PROCESSING = "processing"
@@ -68,6 +69,7 @@ class JobStage(str, enum.Enum):
 
 # ── Case ──────────────────────────────────────────────────────────────────────
 
+
 class Case(Base):
     __tablename__ = "cases"
 
@@ -81,15 +83,24 @@ class Case(Base):
     consent_given: Mapped[bool] = mapped_column(Boolean, default=False)
     owner_id: Mapped[str] = mapped_column(String(36))  # auth placeholder
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
 
     # Relationships
-    media: Mapped[list["SourceMedia"]] = relationship("SourceMedia", back_populates="case", cascade="all, delete-orphan")
-    jobs: Mapped[list["ProcessingJob"]] = relationship("ProcessingJob", back_populates="case", cascade="all, delete-orphan")
-    processing_log: Mapped[list["ProcessingLog"]] = relationship("ProcessingLog", back_populates="case")
+    media: Mapped[list["SourceMedia"]] = relationship(
+        "SourceMedia", back_populates="case", cascade="all, delete-orphan"
+    )
+    jobs: Mapped[list["ProcessingJob"]] = relationship(
+        "ProcessingJob", back_populates="case", cascade="all, delete-orphan"
+    )
+    processing_log: Mapped[list["ProcessingLog"]] = relationship(
+        "ProcessingLog", back_populates="case", cascade="all, delete-orphan"
+    )
 
 
 # ── Source Media ──────────────────────────────────────────────────────────────
+
 
 class SourceMedia(Base):
     """
@@ -98,6 +109,7 @@ class SourceMedia(Base):
     The original bytes NEVER change after upload. sha256 is computed server-side
     and must match on every re-download. derived_from_id is NULL for originals.
     """
+
     __tablename__ = "source_media"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -105,7 +117,7 @@ class SourceMedia(Base):
     original_filename: Mapped[str] = mapped_column(String(500))
     mime_type: Mapped[str] = mapped_column(String(100))
     byte_length: Mapped[int] = mapped_column(BigInteger)
-    sha256: Mapped[str] = mapped_column(String(64))          # hex digest
+    sha256: Mapped[str] = mapped_column(String(64))  # hex digest
     storage_path: Mapped[str] = mapped_column(String(1000))  # server-side path
     status: Mapped[MediaStatus] = mapped_column(Enum(MediaStatus), default=MediaStatus.UPLOADING)
     upload_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
@@ -134,16 +146,22 @@ class SourceMedia(Base):
 
 # ── Derived Artifact ──────────────────────────────────────────────────────────
 
+
 class DerivedArtifact(Base):
     """
     Any file produced FROM a source media (thumbnails, compressed previews, frame indexes).
     Always links back to its parent with a hash chain.
     """
+
     __tablename__ = "derived_artifacts"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    source_media_id: Mapped[str] = mapped_column(String(36), ForeignKey("source_media.id", ondelete="CASCADE"))
-    artifact_type: Mapped[str] = mapped_column(String(100))  # thumbnail | preview | frame_index | track_data
+    source_media_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("source_media.id", ondelete="CASCADE")
+    )
+    artifact_type: Mapped[str] = mapped_column(
+        String(100)
+    )  # thumbnail | preview | frame_index | track_data
     storage_path: Mapped[str] = mapped_column(String(1000))
     sha256: Mapped[str] = mapped_column(String(64))
     tool_name: Mapped[str] = mapped_column(String(100))
@@ -151,17 +169,22 @@ class DerivedArtifact(Base):
     parameters: Mapped[str | None] = mapped_column(Text)  # JSON
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
-    source_media: Mapped["SourceMedia"] = relationship("SourceMedia", back_populates="derived_artifacts")
+    source_media: Mapped["SourceMedia"] = relationship(
+        "SourceMedia", back_populates="derived_artifacts"
+    )
 
 
 # ── Processing Job ────────────────────────────────────────────────────────────
+
 
 class ProcessingJob(Base):
     __tablename__ = "processing_jobs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"))
-    media_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("source_media.id", ondelete="SET NULL"))
+    media_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("source_media.id", ondelete="SET NULL")
+    )
     stage: Mapped[JobStage] = mapped_column(Enum(JobStage))
     status: Mapped[JobStatus] = mapped_column(Enum(JobStatus), default=JobStatus.QUEUED)
     progress: Mapped[int] = mapped_column(Integer, default=0)  # 0-100
@@ -176,10 +199,12 @@ class ProcessingJob(Base):
 
 # ── Processing Log ────────────────────────────────────────────────────────────
 
+
 class ProcessingLog(Base):
     """
     Immutable append-only audit trail. Every transformation is recorded here.
     """
+
     __tablename__ = "processing_log"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

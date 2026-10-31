@@ -5,22 +5,32 @@ Every byte of the original is stored untouched. SHA-256 is computed
 server-side as the stream lands. A probe job is queued immediately.
 """
 
+import asyncio
 import hashlib
 import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from services.api.db.session import get_db
 from services.api.db.models import (
-    Case, SourceMedia, ProcessingJob, ProcessingLog,
-    MediaStatus, JobStatus, JobStage,
+    Case,
+    DerivedArtifact,
+    JobStage,
+    JobStatus,
+    MediaStatus,
+    ProcessingJob,
+    ProcessingLog,
+    SourceMedia,
 )
-from services.api.schemas.media import SourceMediaResponse, IntegrityCheckResponse
+from services.api.db.session import get_db
+from services.api.schemas.media import IntegrityCheckResponse, SourceMediaResponse
+from services.worker.jobs.ingest import probe_media_task
+from services.worker.media.integrity import sha256_file
 
 router = APIRouter(prefix="/cases/{case_id}/media", tags=["media"])
 
@@ -59,9 +69,7 @@ async def upload_media(
     await _get_case_or_404(case_id, db)
 
     # Check clip limit
-    count_result = await db.execute(
-        select(SourceMedia).where(SourceMedia.case_id == case_id)
-    )
+    count_result = await db.execute(select(SourceMedia).where(SourceMedia.case_id == case_id))
     existing = count_result.scalars().all()
     if len(existing) >= MAX_CLIPS:
         raise HTTPException(
@@ -78,7 +86,9 @@ async def upload_media(
 
     media_id = str(uuid.uuid4())
     storage_dir = _case_storage(case_id)
-    ext = Path(file.filename or "upload").suffix or ".mp4"
+    ext = Path(file.filename or "upload").suffix.lower()
+    if ext not in {".mp4", ".mov", ".avi", ".webm"}:
+        raise HTTPException(status_code=415, detail="Unsupported video file extension")
     dest_path = storage_dir / f"{media_id}{ext}"
 
     # Stream to disk + compute SHA-256 in a single pass
@@ -86,20 +96,25 @@ async def upload_media(
     total_bytes = 0
     chunk_size = 1024 * 1024  # 1 MB chunks
 
-    with open(dest_path, "wb") as f:
-        while True:
-            chunk = await file.read(chunk_size)
-            if not chunk:
-                break
-            total_bytes += len(chunk)
-            if total_bytes > MAX_SIZE_BYTES:
-                dest_path.unlink(missing_ok=True)
-                raise HTTPException(
-                    status_code=413,
-                    detail=f"File exceeds {os.getenv('MAX_UPLOAD_SIZE_MB', 500)} MB limit.",
-                )
-            hasher.update(chunk)
-            f.write(chunk)
+    try:
+        with open(dest_path, "xb") as f:
+            while True:
+                chunk = await file.read(chunk_size)
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > MAX_SIZE_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File exceeds {os.getenv('MAX_UPLOAD_SIZE_MB', 500)} MB limit.",
+                    )
+                hasher.update(chunk)
+                f.write(chunk)
+        if total_bytes == 0:
+            raise HTTPException(status_code=400, detail="Empty video file")
+    except Exception:
+        dest_path.unlink(missing_ok=True)
+        raise
 
     sha256_hex = hasher.hexdigest()
 
@@ -140,7 +155,21 @@ async def upload_media(
     )
     db.add(log)
 
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception:
+        dest_path.unlink(missing_ok=True)
+        raise
+    try:
+        await asyncio.to_thread(probe_media_task.delay, media_id, job.id)
+    except Exception as exc:
+        job.status = JobStatus.FAILED
+        job.error_message = f"Could not enqueue media probe: {exc}"[:1000]
+        await db.commit()
+        raise HTTPException(
+            status_code=503,
+            detail="Media stored, but processing is unavailable. Retry this job later.",
+        ) from exc
     await db.refresh(media)
     return SourceMediaResponse.model_validate(media)
 
@@ -155,7 +184,9 @@ async def list_media(case_id: str, db: AsyncSession = Depends(get_db)) -> list[S
 
 
 @router.get("/{media_id}", response_model=SourceMediaResponse)
-async def get_media(case_id: str, media_id: str, db: AsyncSession = Depends(get_db)) -> SourceMediaResponse:
+async def get_media(
+    case_id: str, media_id: str, db: AsyncSession = Depends(get_db)
+) -> SourceMediaResponse:
     result = await db.execute(
         select(SourceMedia).where(SourceMedia.id == media_id, SourceMedia.case_id == case_id)
     )
@@ -169,27 +200,17 @@ async def get_media(case_id: str, media_id: str, db: AsyncSession = Depends(get_
 async def verify_integrity(
     case_id: str, media_id: str, db: AsyncSession = Depends(get_db)
 ) -> IntegrityCheckResponse:
-    """
-    Re-compute SHA-256 of the stored original and compare to the recorded hash.
-    A mismatch means the file has been altered since upload — hard failure.
-    """
+    """Compare the stored original with its intake hash."""
     result = await db.execute(
         select(SourceMedia).where(SourceMedia.id == media_id, SourceMedia.case_id == case_id)
     )
     media = result.scalar_one_or_none()
     if not media:
         raise HTTPException(status_code=404, detail="Media not found")
-
     path = Path(media.storage_path)
     if not path.exists():
-        raise HTTPException(status_code=500, detail="Stored file not found on disk.")
-
-    hasher = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            hasher.update(chunk)
-    verified = hasher.hexdigest()
-
+        raise HTTPException(status_code=500, detail="Stored file not found on disk")
+    verified = sha256_file(path)
     return IntegrityCheckResponse(
         media_id=media_id,
         original_sha256=media.sha256,
@@ -197,6 +218,60 @@ async def verify_integrity(
         intact=verified == media.sha256,
         checked_at=datetime.now(timezone.utc),
     )
+
+
+@router.get("/{media_id}/original")
+async def download_original(
+    case_id: str, media_id: str, db: AsyncSession = Depends(get_db)
+) -> FileResponse:
+    result = await db.execute(
+        select(SourceMedia).where(SourceMedia.id == media_id, SourceMedia.case_id == case_id)
+    )
+    media = result.scalar_one_or_none()
+    if not media:
+        raise HTTPException(status_code=404, detail="Media not found")
+    path = Path(media.storage_path)
+    if not path.exists() or sha256_file(path) != media.sha256:
+        raise HTTPException(status_code=409, detail="Original media integrity check failed")
+    return FileResponse(
+        path, media_type="application/octet-stream", filename=Path(media.original_filename).name
+    )
+
+
+@router.post("/{media_id}/retry", status_code=status.HTTP_202_ACCEPTED)
+async def retry_probe(
+    case_id: str, media_id: str, db: AsyncSession = Depends(get_db)
+) -> dict[str, str]:
+    result = await db.execute(
+        select(SourceMedia).where(SourceMedia.id == media_id, SourceMedia.case_id == case_id)
+    )
+    media = result.scalar_one_or_none()
+    if not media:
+        raise HTTPException(status_code=404, detail="Media not found")
+    if media.status != MediaStatus.FAILED:
+        raise HTTPException(status_code=409, detail="Only failed media can be retried")
+    path = Path(media.storage_path)
+    if not path.exists() or sha256_file(path) != media.sha256:
+        raise HTTPException(status_code=409, detail="Original media integrity check failed")
+    job = ProcessingJob(
+        id=str(uuid.uuid4()),
+        case_id=case_id,
+        media_id=media_id,
+        stage=JobStage.PROBE,
+        status=JobStatus.QUEUED,
+    )
+    db.add(job)
+    media.status = MediaStatus.STORED
+    await db.commit()
+    try:
+        await asyncio.to_thread(probe_media_task.delay, media_id, job.id)
+    except Exception as exc:
+        media.status = MediaStatus.FAILED
+        job.status = JobStatus.FAILED
+        job.error_message = f"Could not enqueue media probe: {exc}"[:1000]
+        await db.commit()
+        raise HTTPException(status_code=503, detail="Processing is unavailable") from exc
+    return {"job_id": job.id}
 
 
 @router.delete("/{media_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -207,6 +282,13 @@ async def delete_media(case_id: str, media_id: str, db: AsyncSession = Depends(g
     media = result.scalar_one_or_none()
     if not media:
         raise HTTPException(status_code=404, detail="Media not found")
-    Path(media.storage_path).unlink(missing_ok=True)
+    original_path = Path(media.storage_path)
+    artifact_result = await db.execute(
+        select(DerivedArtifact).where(DerivedArtifact.source_media_id == media_id)
+    )
+    derived_paths = [Path(artifact.storage_path) for artifact in artifact_result.scalars().all()]
     await db.delete(media)
     await db.commit()
+    original_path.unlink(missing_ok=True)
+    for path in derived_paths:
+        path.unlink(missing_ok=True)
