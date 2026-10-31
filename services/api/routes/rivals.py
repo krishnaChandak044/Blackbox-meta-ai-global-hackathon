@@ -23,11 +23,12 @@ router = APIRouter(prefix="/cases/{case_id}/media/{media_id}", tags=["rivals"])
 
 
 class SecondViewInput(BaseModel):
-    """Optional caller-provided observations; caller must document synchronization/calibration."""
+    """Second-view observations plus primary-to-second synchronization metadata."""
     synchronized: bool = False
     calibrated: bool = False
     same_world_frame: bool = False
     observations: list[dict] = Field(default_factory=list)
+    primary_observations: list[dict] = Field(default_factory=list)
 
 
 class RivalSearchRequest(BaseModel):
@@ -75,6 +76,8 @@ async def run_rival_search(
     primary = await db.get(DynamicsRun, payload.primary_run_id)
     if primary is None or primary.case_id != case_id or primary.media_id != media_id or primary.status != "done":
         raise HTTPException(409, "A completed dynamics run for this media is required")
+    if primary.entry_speed_kmh is None:
+        raise HTTPException(409, "Primary entry speed is not available; cannot bound rival search")
     track = await db.get(ObjectTrack, primary.track_id)
     if track is None or not track.is_human_confirmed:
         raise HTTPException(409, "The source track must still exist and be reviewer-confirmed")
@@ -104,6 +107,7 @@ async def run_rival_search(
     params = {
         "n_grid": payload.grid_n,
         "acceptance_threshold_m": payload.acceptance_threshold_m,
+        "decel_reference_ms2": primary.mean_decel_ms2 or 4.0,
     }
     for key in ("speed_lo_kmh", "speed_hi_kmh", "decel_lo_ms2", "decel_hi_ms2"):
         value = getattr(payload, key)

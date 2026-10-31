@@ -30,8 +30,10 @@ def search_rivals(
         raise ValueError("Rival search requires calibrated world-coordinate observations")
     primary_v = primary_run.get("entry_speed_kmh")
     primary_a = primary_run.get("mean_decel_ms2")
-    if primary_v is None or primary_a is None:
-        raise ValueError("Primary speed and deceleration must be identifiable before rival search")
+    if primary_v is None:
+        raise ValueError("Primary entry speed must be available to bound rival search")
+    if primary_a is None:
+        primary_a = float(params.get("decel_reference_ms2", 4.0))
 
     obs = sorted(observations, key=lambda item: item["presentation_ts_s"])
     t0, t1 = obs[0]["presentation_ts_s"], obs[-1]["presentation_ts_s"]
@@ -133,23 +135,38 @@ def search_rivals(
     )
 
 
-def _compute_residual(speed_kmh: float, decel_ms2: float, onset_s: float, observations: list[dict]) -> float:
+def _compute_residual(
+    speed_kmh: float,
+    decel_ms2: float,
+    onset_s: float,
+    observations: list[dict],
+    direction: tuple[float, float] | None = None,
+    origin: tuple[float, float] | None = None,
+) -> float:
     obs = sorted(observations, key=lambda item: item["presentation_ts_s"])
     t = np.asarray([item["presentation_ts_s"] for item in obs], dtype=float)
     x = np.asarray([item["world_x_m"] for item in obs], dtype=float)
     y = np.asarray([item["world_y_m"] for item in obs], dtype=float)
-    displacement = np.array([x[-1] - x[0], y[-1] - y[0]])
-    norm = float(np.linalg.norm(displacement))
-    if norm <= 1e-9:
-        return math.inf
-    direction = displacement / norm
+    if direction is None:
+        displacement = np.array([x[-1] - x[0], y[-1] - y[0]])
+        norm = float(np.linalg.norm(displacement))
+        if norm <= 1e-9:
+            return math.inf
+        direction_v = displacement / norm
+    else:
+        direction_v = np.asarray(direction, dtype=float)
+        norm = float(np.linalg.norm(direction_v))
+        if norm <= 1e-9:
+            return math.inf
+        direction_v /= norm
+    origin_v = np.asarray(origin if origin is not None else (x[0], y[0]), dtype=float)
     dt = np.maximum(0.0, t - t[0])
     braking_delay = max(0.0, onset_s - t[0])
     v0 = speed_kmh / 3.6
     brake_elapsed = np.maximum(0.0, dt - braking_delay)
     brake_elapsed = np.minimum(brake_elapsed, v0 / max(decel_ms2, 1e-6))
     distance = v0 * np.minimum(dt, braking_delay) + v0 * brake_elapsed - 0.5 * decel_ms2 * brake_elapsed**2
-    pred = np.array([x[0], y[0]]) + distance[:, None] * direction[None, :]
+    pred = origin_v + distance[:, None] * direction_v[None, :]
     return float(np.sqrt(np.mean(np.sum((pred - np.column_stack([x, y]))**2, axis=1))))
 
 
@@ -167,8 +184,22 @@ def _disambiguate(speed, decel, onset, primary_speed, primary_decel, primary_ons
     if not _second_view_adequate(second_view):
         return "unresolved", "Second view lacks verified synchronization, calibration, shared world frame, or five timestamped observations.", None
     obs = second_view["observations"]
-    rival_res = _compute_residual(speed, decel, onset, obs)
-    primary_res = _compute_residual(primary_speed, primary_decel, primary_onset, obs)
+    # The shared world frame is essential: derive heading and origin from the
+    # primary-view observations, then score both candidate histories against
+    # second-view points using that same physical direction and coordinate frame.
+    primary_obs = second_view.get("primary_observations")
+    if not primary_obs or len(primary_obs) < 5:
+        return "unresolved", "Second view cannot be scored without primary-view observations for shared heading/origin.", None
+    ordered_primary = sorted(primary_obs, key=lambda item: item["presentation_ts_s"])
+    dx = ordered_primary[-1]["world_x_m"] - ordered_primary[0]["world_x_m"]
+    dy = ordered_primary[-1]["world_y_m"] - ordered_primary[0]["world_y_m"]
+    norm = math.hypot(dx, dy)
+    if norm <= 1e-9:
+        return "unresolved", "Primary observations do not define a stable direction for shared-frame scoring.", None
+    direction = (dx / norm, dy / norm)
+    origin = (ordered_primary[0]["world_x_m"], ordered_primary[0]["world_y_m"])
+    rival_res = _compute_residual(speed, decel, onset, obs, direction, origin)
+    primary_res = _compute_residual(primary_speed, primary_decel, primary_onset, obs, direction, origin)
     if rival_res > threshold and primary_res <= threshold:
         return "rejected_by_evidence", f"Second-view residual for rival is {rival_res:.3f} m (> {threshold:.3f} m); primary is {primary_res:.3f} m (≤ threshold).", None
     return "unresolved", f"Second view did not cross the predeclared rejection threshold (rival={rival_res:.3f} m, primary={primary_res:.3f} m).", None

@@ -159,13 +159,13 @@ def _piecewise_const_accel(
 def _residuals_1seg(p, t, obs_x, obs_y, w):
     t0, x0, y0, vx0, vy0, ax, ay = p
     x, y = _piecewise_const_accel(t, t0, x0, y0, vx0, vy0, ax, ay, None, 0, 0)
-    return w * np.concatenate([x - obs_x, y - obs_y])
+    return np.concatenate([w * (x - obs_x), w * (y - obs_y)])
 
 
 def _residuals_2seg(p, t, obs_x, obs_y, w, t_break):
     t0, x0, y0, vx0, vy0, ax1, ay1, ax2, ay2 = p
     x, y = _piecewise_const_accel(t, t0, x0, y0, vx0, vy0, ax1, ay1, t_break, ax2, ay2)
-    return w * np.concatenate([x - obs_x, y - obs_y])
+    return np.concatenate([w * (x - obs_x), w * (y - obs_y)])
 
 
 # ── Main inference function ───────────────────────────────────────────────────
