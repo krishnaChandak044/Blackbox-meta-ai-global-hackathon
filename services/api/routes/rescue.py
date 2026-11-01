@@ -66,13 +66,14 @@ async def list_needs(case_id: str, db: AsyncSession = Depends(get_db),
         row = by_key.get(suggestion["need_key"])
         if row:
             suggestion.update({"id": row.id, "state": row.state,
-                               "verification": json.loads(row.verification_json) if row.verification_json else None})
+                               "verification": json.loads(row.verification_json) if row.verification_json else None,
+                               "draft_text": row.draft_text})
             continue
         row = EvidenceNeed(id=str(uuid.uuid4()), case_id=case_id, need_key=suggestion["need_key"],
                            snapshot_json=json.dumps(suggestion, sort_keys=True), state="suggested",
                            created_by="system", updated_by="system")
         db.add(row)
-        suggestion.update({"id": row.id, "state": row.state, "verification": None})
+        suggestion.update({"id": row.id, "state": row.state, "verification": None, "draft_text": None})
     await db.commit()
     return {"case_id": case_id, "analysis_run_id": runs[0].id if runs else None,
             "media_count": len(media), "needs": suggestions,

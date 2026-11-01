@@ -37,7 +37,7 @@ export default function RivalsPage({ params }: { params: { id: string; mediaId: 
         <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}><strong>Rival {String(item.rank)} · {String(item.disambiguation_status).replaceAll("_", " ")}</strong><span className="badge badge-neutral">Track residual {Number(item.residual).toFixed(3)} m</span></div>
         <p className="text-sm">Candidate parameters: {JSON.stringify(item.params)}</p>
         <p className="text-sm">Primary residual: {Number(item.primary_residual).toFixed(3)} m. {item.rejection_reason ? String(item.rejection_reason) : "No second view was supplied; this rival remains unresolved."}</p>
-        {item.distinguishing_evidence && <p className="text-xs">Potentially useful evidence: {String(item.distinguishing_evidence)}</p>}
+        {item.distinguishing_evidence != null && <p className="text-xs">Potentially useful evidence: {String(item.distinguishing_evidence)}</p>}
       </article>)}</div>}
       <p className="text-xs" style={{ marginTop: 14 }}>{result.second_view_notes}</p>
       <p className="text-xs">Search ID: {result.id}. All candidate and threshold details are saved with this search.</p>

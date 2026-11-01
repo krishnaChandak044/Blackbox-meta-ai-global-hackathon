@@ -155,6 +155,11 @@ export default function CaseDetailPage() {
           </div>
         </div>
 
+        <div className="phase5-entry card mb-6">
+          <div><strong>Phase 5 review tools</strong><p className="text-sm text-secondary mt-1">Evidence Rescue Radar, Prevention Atlas consent, and traceable PDF/JSON exports.</p></div>
+          <Link href={`/cases/${id}/phase5`} className="btn btn-primary">Open review tools →</Link>
+        </div>
+
         {/* Source Media */}
         <section>
           <div className="flex items-center justify-between mb-4">
@@ -290,6 +295,7 @@ export default function CaseDetailPage() {
                             <Link className="btn btn-ghost btn-sm" href={`/cases/${id}/media/${m.id}/tracks`}>Tracks</Link>
                             <Link className="btn btn-ghost btn-sm" href={`/cases/${id}/media/${m.id}/calibration`}>Calibrate</Link>
                             <Link className="btn btn-ghost btn-sm" href={`/cases/${id}/media/${m.id}/dynamics`}>Dynamics</Link>
+                            <Link className="btn btn-ghost btn-sm" href={`/cases/${id}/media/${m.id}/scene3d`}>3D replay</Link>
                             <button className="btn btn-ghost btn-sm" onClick={() => mediaApi.downloadOriginal(id, m.id, m.original_filename)}>Download original</button>
                             {m.status === "failed" && <button className="btn btn-ghost btn-sm" onClick={async () => { await mediaApi.retry(id, m.id); await refresh(); }}>Retry processing</button>}
                             <button
@@ -426,10 +432,13 @@ function SidebarShell({ caseId, kaseTitle }: { caseId: string; kaseTitle?: strin
             <Link href={`/cases/${caseId}/claims`} className="nav-item">
               <span className="nav-item-icon">⚖️</span> Claims
             </Link>
+            <Link href={`/cases/${caseId}/phase5`} className="nav-item">
+              <span className="nav-item-icon">▧</span> Evidence &amp; exports
+            </Link>
           </>
         )}
       </nav>
-      <div className="sidebar-footer">Phase 3 · Language &amp; Claims</div>
+      <div className="sidebar-footer">Evidence review workspace</div>
     </aside>
   );
 }

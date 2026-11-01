@@ -385,3 +385,218 @@ export const tracksApi = {
     }),
 };
 
+/* ── Phase 5 — 3D scene, evidence rescue, Atlas, review exports ───────────── */
+export interface ScenePosition {
+  x: number;
+  y: number;
+  z: number;
+}
+export interface SceneSample {
+  frame_index: number;
+  presentation_ts_s: number;
+  position_m: ScenePosition;
+  position_2d_m: { x: number; y: number };
+  provenance: string;
+  uncertainty_sigma_m?: number | null;
+  uncertainty_sigma_xy_m?: { x: number; y: number; coverage: string };
+  source?: { media_id: string; frame_index: number };
+  uncertainty?: string;
+}
+export interface ScenePath {
+  run_id?: string;
+  baseline_run_id?: string;
+  path_type: string;
+  provenance: string;
+  interval_type?: string | null;
+  illustrative_label?: string;
+  samples: SceneSample[];
+}
+export interface SceneObject {
+  track_id: string;
+  class: string;
+  review_status: string;
+  geometry: { source: string; label: string };
+  samples: SceneSample[];
+}
+export interface SceneRivalHypothesis {
+  rank: number;
+  params: Record<string, number>;
+  residual_m: number;
+  disambiguation_status: string;
+  samples: SceneSample[];
+}
+export interface SceneRivalPath {
+  search_id: string;
+  path_type: string;
+  provenance: string;
+  illustrative_label: string;
+  hypotheses: SceneRivalHypothesis[];
+}
+export interface Scene3D {
+  scene_id: string;
+  schema_version: string;
+  generated_at: string;
+  case_id: string;
+  media_id: string;
+  media_sha256: string;
+  coordinate_system: {
+    handedness: string;
+    units: string;
+    ground_plane: string;
+    origin: string;
+    calibration_fit_id: string | null;
+    transform_source: string;
+  };
+  camera_pose: { status: string; reason: string };
+  objects: SceneObject[];
+  fitted_paths: ScenePath[];
+  counterfactual_paths: ScenePath[];
+  rival_paths: SceneRivalPath[];
+  synthetic_view_label: string;
+  limitations: string[];
+}
+
+export interface EvidenceNeed {
+  id: string;
+  need_key: string;
+  title: string;
+  evidence_type: string;
+  questions: string[];
+  heuristic_expected_reduction_fraction: number;
+  effort_score_1_low_5_high: number;
+  privacy_cost_1_low_5_high: number;
+  availability: string;
+  retention_deadline: { hours_remaining: number; basis: string } | null;
+  ranking_basis: string;
+  urgency_score_0_1: number;
+  priority_score: number;
+  reduction_metric: string;
+  state: string;
+  verification: Record<string, unknown> | null;
+  draft_text: string | null;
+}
+export interface EvidenceNeedsResponse {
+  case_id: string;
+  analysis_run_id: string | null;
+  media_count: number;
+  needs: EvidenceNeed[];
+  retention_deadline_default: string;
+  ranking_note: string;
+}
+export interface EvidenceNeedUpdate {
+  state: "verified_source" | "drafted" | "requested_by_user" | "received" | "unavailable" | "refused";
+  source_description?: string;
+  verified?: boolean;
+  retention_deadline?: string | null;
+  timezone_name?: string;
+  contact_name?: string;
+  contact_details?: string;
+}
+export interface EvidenceDraftInput {
+  recipient: string;
+  source_description: string;
+  date_range: string;
+  time_range: string;
+}
+export interface AtlasAggregate {
+  coarse_cell: string;
+  time_bucket: string;
+  conflict_type: string;
+  distinct_case_count: number;
+  provenance: string;
+  synthetic_included: boolean;
+  road_user_mix: Record<string, number>;
+  mean_metrics: Record<string, number>;
+  limitations: string;
+}
+export interface AtlasResponse {
+  minimum_cohort: number;
+  private_by_default: boolean;
+  access_scope: string;
+  suppressed_group_count: number;
+  aggregates: AtlasAggregate[];
+}
+export interface AtlasContributionInput {
+  source_run_id: string;
+  coarse_cell: string;
+  time_bucket: string;
+  conflict_type: "crossing" | "rear_end" | "turning" | "merge" | "other";
+  road_user_mix: Record<string, number>;
+  metrics: Record<string, number>;
+  reviewer_confirmed: boolean;
+}
+export interface CaseExport {
+  export_id: string;
+  case_id: string;
+  status: "queued" | "running" | "complete" | "failed" | "stale";
+  job_id: string | null;
+  case_revision_hash: string;
+  manifest_sha256: string | null;
+  pdf_sha256: string | null;
+  json_sha256: string | null;
+  error_message: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export const phase5Api = {
+  scene: (caseId: string, mediaId: string) =>
+    req<Scene3D>(`/cases/${caseId}/media/${mediaId}/scene3d`),
+  evidenceNeeds: (caseId: string) =>
+    req<EvidenceNeedsResponse>(`/cases/${caseId}/evidence-needs`),
+  updateEvidenceNeed: (caseId: string, needId: string, body: EvidenceNeedUpdate) =>
+    req<{ id: string; state: string; verification: Record<string, unknown> }>(
+      `/cases/${caseId}/evidence-needs/${needId}/verification`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  draftEvidenceRequest: (caseId: string, needId: string, body: EvidenceDraftInput) =>
+    req<{ id: string; state: string; draft: string; sent: false }>(
+      `/cases/${caseId}/evidence-needs/${needId}/draft`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  getAtlasConsent: (caseId: string) =>
+    req<{ case_id: string; opted_in: boolean; scope_version: string; consented_at: string | null; revoked_at: string | null }>(
+      `/atlas/cases/${caseId}/consent`,
+    ),
+  setAtlasConsent: (caseId: string, optedIn: boolean) =>
+    req<{ case_id: string; opted_in: boolean; scope_version: string; consented_at: string | null; revoked_at: string | null }>(
+      `/atlas/cases/${caseId}/consent`,
+      { method: "POST", body: JSON.stringify({ opted_in: optedIn, scope_version: "atlas-derived-coarse-v1" }) },
+    ),
+  addAtlasContribution: (caseId: string, body: AtlasContributionInput) =>
+    req<{ contribution_id: string; included: boolean; public_or_cross_case_visibility: string }>(
+      `/atlas/cases/${caseId}/contributions`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  atlasAggregates: () => req<AtlasResponse>("/atlas"),
+  createExport: (caseId: string) =>
+    req<{ export_id: string; job_id: string; status: string; case_revision_hash: string }>(
+      `/cases/${caseId}/exports`, { method: "POST" },
+    ),
+  listExports: (caseId: string) => req<CaseExport[]>(`/cases/${caseId}/exports`),
+  getExport: (caseId: string, exportId: string) =>
+    req<CaseExport>(`/cases/${caseId}/exports/${exportId}`),
+  downloadExport: async (caseId: string, exportId: string, kind: "pdf" | "json") => {
+    const response = await fetch(
+      `${V1}/cases/${caseId}/exports/${exportId}/files/${kind}`,
+      { credentials: "include" },
+    );
+    if (response.status === 401) {
+      if (typeof window !== "undefined") window.location.href = "/login";
+      throw new Error("Authentication required");
+    }
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(error.detail ?? "Export download failed");
+    }
+    const blobUrl = URL.createObjectURL(await response.blob());
+    const anchor = document.createElement("a");
+    anchor.href = blobUrl;
+    anchor.download = `blackbox-${exportId}.${kind}`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+  },
+};
+
