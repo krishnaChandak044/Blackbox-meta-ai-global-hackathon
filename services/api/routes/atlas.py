@@ -100,6 +100,20 @@ async def set_consent(case_id: str, payload: ConsentInput,
             "actor": user, "consented_at": consent.consented_at, "revoked_at": consent.revoked_at}
 
 
+@router.get("/cases/{case_id}/consent")
+async def get_consent(case_id: str, db: AsyncSession = Depends(get_db),
+                      _: str = Depends(current_user)) -> dict:
+    if await db.get(Case, case_id) is None:
+        raise HTTPException(404, "Case not found")
+    consent = (await db.execute(select(AtlasConsent).where(
+        AtlasConsent.case_id == case_id
+    ))).scalar_one_or_none()
+    return {"case_id": case_id, "opted_in": bool(consent and consent.opted_in),
+            "scope_version": consent.scope_version if consent else SCOPE_VERSION,
+            "consented_at": consent.consented_at if consent else None,
+            "revoked_at": consent.revoked_at if consent else None}
+
+
 @router.post("/cases/{case_id}/contributions", status_code=201)
 async def add_contribution(case_id: str, payload: ContributionInput,
                            db: AsyncSession = Depends(get_db), user: str = Depends(current_user)) -> dict:
