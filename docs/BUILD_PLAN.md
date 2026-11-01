@@ -117,6 +117,10 @@ Do not mark Phase 4 complete until G5, G6, and G8 have recorded evaluation artif
 
 ## Phase 5 implementation plan — 3D replay, rescue radar, atlas, and export
 
+### Backend implementation status (2026-11-01)
+
+The backend-only Phase 5 implementation is on `feature/phase-5-backend`. It adds the versioned renderer-neutral scene endpoint, deterministic evidence-need ranking with human verification and unsent drafts, separate opt-in Atlas consent/contribution/cohort aggregation, and authenticated PDF/JSON export jobs with media re-hashing, case-revision checks, artifact hashes, and lineage. The migration is `20261101_phase5_backend`. Focused backend integration checks cover exact 2D-to-scene coordinate preservation, non-invented source/deadline behavior, and a fresh staged-media export. The frontend/viewer is intentionally outside this implementation; therefore browser G7 rendering checks and the full user-visible G9 gate remain outstanding. This backend status is not a claim of full Phase 5 completion or production readiness.
+
 ### Purpose and completion boundary
 
 Phase 5 turns the versioned outputs from Phases 1–4 into a reviewable case package. It adds an orbitable, time-synchronized 3D explanation; a ranked request for missing evidence; an opt-in, privacy-protected multi-case prevention view; and a self-contained PDF plus JSON export. It does not infer unseen facts from a 3D mesh, identify nearby camera owners, send preservation requests, publish personal case information, or turn modeled junction outcomes into engineering advice.

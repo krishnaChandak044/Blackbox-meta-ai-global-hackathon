@@ -16,4 +16,6 @@ app.conf.imports = (
     "services.worker.jobs.tracking",
     "services.worker.jobs.transcription",
     "services.worker.jobs.claim_extraction",
+    "services.worker.jobs.export",
+    "services.worker.jobs.dynamics",
 )
