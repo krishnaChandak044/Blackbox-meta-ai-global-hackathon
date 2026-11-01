@@ -564,3 +564,95 @@ class RivalSearch(Base):
     second_view_notes: Mapped[str] = mapped_column(Text, default="No second view provided.")
 
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+# ── Phase 5: evidence needs, opt-in prevention atlas, immutable exports ──────
+
+
+class EvidenceNeed(Base):
+    __tablename__ = "evidence_needs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"), index=True)
+    need_key: Mapped[str] = mapped_column(String(120))
+    snapshot_json: Mapped[str] = mapped_column(Text)
+    state: Mapped[str] = mapped_column(String(30), default="suggested")
+    verification_json: Mapped[str | None] = mapped_column(Text)
+    draft_text: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[str] = mapped_column(String(100))
+    updated_by: Mapped[str] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class ReviewerAction(Base):
+    __tablename__ = "reviewer_actions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"), index=True)
+    target_type: Mapped[str] = mapped_column(String(40))
+    target_id: Mapped[str] = mapped_column(String(36))
+    action: Mapped[str] = mapped_column(String(60))
+    before_json: Mapped[str | None] = mapped_column(Text)
+    after_json: Mapped[str] = mapped_column(Text)
+    actor: Mapped[str] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class AtlasConsent(Base):
+    __tablename__ = "atlas_consents"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"), unique=True)
+    opted_in: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    scope_version: Mapped[str] = mapped_column(String(40))
+    actor: Mapped[str] = mapped_column(String(100))
+    consented_at: Mapped[datetime | None] = mapped_column(DateTime)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class AtlasConsentEvent(Base):
+    __tablename__ = "atlas_consent_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"), index=True)
+    opted_in: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    scope_version: Mapped[str] = mapped_column(String(40))
+    actor: Mapped[str] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class AtlasContribution(Base):
+    __tablename__ = "atlas_contributions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"), index=True)
+    source_run_id: Mapped[str] = mapped_column(String(36), ForeignKey("dynamics_runs.id", ondelete="RESTRICT"))
+    dedupe_key: Mapped[str] = mapped_column(String(64), unique=True)
+    coarse_cell: Mapped[str] = mapped_column(String(40), index=True)
+    time_bucket: Mapped[str] = mapped_column(String(12))
+    conflict_type: Mapped[str] = mapped_column(String(40))
+    road_user_mix_json: Mapped[str] = mapped_column(Text)
+    metrics_json: Mapped[str] = mapped_column(Text)
+    provenance_json: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class ExportRecord(Base):
+    __tablename__ = "export_records"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"), index=True)
+    case_revision_hash: Mapped[str] = mapped_column(String(64))
+    manifest_sha256: Mapped[str | None] = mapped_column(String(64))
+    pdf_sha256: Mapped[str | None] = mapped_column(String(64))
+    json_sha256: Mapped[str | None] = mapped_column(String(64))
+    pdf_path: Mapped[str | None] = mapped_column(String(1000))
+    json_path: Mapped[str | None] = mapped_column(String(1000))
+    status: Mapped[str] = mapped_column(String(20), default="queued")
+    job_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("processing_jobs.id"), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[str] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
