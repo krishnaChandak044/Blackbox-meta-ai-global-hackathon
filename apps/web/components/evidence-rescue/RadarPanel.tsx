@@ -142,6 +142,9 @@ export default function RadarPanel({ caseId }: { caseId: string }) {
       {loading && <p className="text-sm text-secondary">Loading evidence needs…</p>}
       {!loading && data && (
         <>
+          {!data.analysis_run_id && <div className="alert alert-info mb-4" role="status">
+            No completed calibrated dynamics run is available for this case. Speed and braking measurements are not produced; the radar is prioritizing evidence needed to establish metric scale.
+          </div>}
           <div className="radar-summary mb-4">
             <span>{data.needs.length} candidate{data.needs.length === 1 ? "" : "s"}</span>
             <span>{data.ranking_note}</span>
