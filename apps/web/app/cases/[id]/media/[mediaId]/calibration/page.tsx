@@ -99,7 +99,7 @@ export default function CalibrationPage({ params }: PageProps) {
 
   const deleteAnchor = async (anchorId: string) => {
     setError(null);
-    try { await calibrationApi.deleteAnchor(caseId, mediaId, anchorId); setAnchors(prev => prev.filter(a => a.id !== anchorId)); setFit(null); setNotice("Point removed. Fit again after you have at least four points."); }
+    try { await calibrationApi.deleteAnchor(caseId, mediaId, anchorId); setAnchors(prev => prev.filter(a => a.id !== anchorId)); setFit(null); setNotice("Point removed. Fit again after you have at least five measured points."); }
     catch (e: unknown) { setError(e instanceof Error ? e.message : "Could not remove this point."); }
   };
 
@@ -138,13 +138,13 @@ export default function CalibrationPage({ params }: PageProps) {
       </section>
 
       <nav aria-label="Calibration steps" style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
-        {["1. Add 4+ road points", "2. Fit the ground plane", "3. Check the result"].map((label, i) => <div key={label} style={{ borderRadius: 999, padding: "8px 14px", fontSize: 13, background: step >= i + 1 ? "var(--sage-light)" : "var(--bg-secondary)", color: step >= i + 1 ? "var(--sage-dark)" : "var(--text-tertiary)" }}>{label}</div>)}
+        {["1. Add 5 measured road points", "2. Fit the ground plane", "3. Check the result"].map((label, i) => <div key={label} style={{ borderRadius: 999, padding: "8px 14px", fontSize: 13, background: step >= i + 1 ? "var(--sage-light)" : "var(--bg-secondary)", color: step >= i + 1 ? "var(--sage-dark)" : "var(--text-tertiary)" }}>{label}</div>)}
       </nav>
 
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.7fr) minmax(320px, 0.9fr)", gap: 18, alignItems: "start" }}>
         <section className="card" style={{ padding: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
-            <strong>1. Pause and mark a road point</strong><span className="text-sm text-tertiary">{anchors.length} saved · need at least 4</span>
+            <strong>1. Pause and mark a road point</strong><span className="text-sm text-tertiary">{anchors.length} saved · need at least 5</span>
           </div>
           <p className="text-sm text-tertiary" style={{ margin: "0 0 12px" }}>Use the video controls to pause at a clear frame, then freeze it. Mark the first four measured road points, then mark a fifth independently measured point to check the result.</p>
           <div style={{ background: "#111", borderRadius: 10, overflow: "hidden", lineHeight: 0 }}>

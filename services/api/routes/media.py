@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.db.models import (
     Case,
+    CaseStatus,
     DerivedArtifact,
     JobStage,
     JobStatus,
@@ -66,7 +67,7 @@ async def upload_media(
     Original bytes are stored unchanged. SHA-256 is computed server-side
     during streaming write (no double read). A probe job is queued.
     """
-    await _get_case_or_404(case_id, db)
+    case = await _get_case_or_404(case_id, db)
 
     # Check clip limit
     count_result = await db.execute(select(SourceMedia).where(SourceMedia.case_id == case_id))
@@ -130,6 +131,7 @@ async def upload_media(
         status=MediaStatus.STORED,
     )
     db.add(media)
+    case.status = CaseStatus.PROCESSING
     # ProcessingJob has a foreign key to source_media. Flush the media row
     # before adding the job so PostgreSQL never attempts the dependent insert
     # before its referenced row exists (the ORM has no media relationship on
@@ -168,12 +170,13 @@ async def upload_media(
     try:
         await asyncio.to_thread(probe_media_task.delay, media_id, job.id)
     except Exception as exc:
+        media.status = MediaStatus.FAILED
         job.status = JobStatus.FAILED
         job.error_message = f"Could not enqueue media probe: {exc}"[:1000]
         await db.commit()
         raise HTTPException(
             status_code=503,
-            detail="Media stored, but processing is unavailable. Retry this job later.",
+            detail="Media was saved, but processing is unavailable. Refresh the case and retry processing; do not upload it again.",
         ) from exc
     await db.refresh(media)
     return SourceMediaResponse.model_validate(media)
@@ -215,7 +218,7 @@ async def verify_integrity(
     path = Path(media.storage_path)
     if not path.exists():
         raise HTTPException(status_code=500, detail="Stored file not found on disk")
-    verified = sha256_file(path)
+    verified = await asyncio.to_thread(sha256_file, path)
     return IntegrityCheckResponse(
         media_id=media_id,
         original_sha256=media.sha256,
@@ -236,7 +239,7 @@ async def download_original(
     if not media:
         raise HTTPException(status_code=404, detail="Media not found")
     path = Path(media.storage_path)
-    if not path.exists() or sha256_file(path) != media.sha256:
+    if not path.exists() or await asyncio.to_thread(sha256_file, path) != media.sha256:
         raise HTTPException(status_code=409, detail="Original media integrity check failed")
     return FileResponse(
         path, media_type="application/octet-stream", filename=Path(media.original_filename).name
@@ -254,7 +257,7 @@ async def stream_original(
     if media is None:
         raise HTTPException(status_code=404, detail="Media not found")
     path = Path(media.storage_path)
-    if not path.exists() or sha256_file(path) != media.sha256:
+    if not path.exists() or await asyncio.to_thread(sha256_file, path) != media.sha256:
         raise HTTPException(status_code=409, detail="Original media integrity check failed")
     return FileResponse(path, media_type=media.mime_type, content_disposition_type="inline")
 
@@ -272,7 +275,7 @@ async def retry_probe(
     if media.status != MediaStatus.FAILED:
         raise HTTPException(status_code=409, detail="Only failed media can be retried")
     path = Path(media.storage_path)
-    if not path.exists() or sha256_file(path) != media.sha256:
+    if not path.exists() or await asyncio.to_thread(sha256_file, path) != media.sha256:
         raise HTTPException(status_code=409, detail="Original media integrity check failed")
     job = ProcessingJob(
         id=str(uuid.uuid4()),
@@ -283,6 +286,8 @@ async def retry_probe(
     )
     db.add(job)
     media.status = MediaStatus.STORED
+    case = await _get_case_or_404(case_id, db)
+    case.status = CaseStatus.PROCESSING
     await db.commit()
     try:
         await asyncio.to_thread(probe_media_task.delay, media_id, job.id)
@@ -309,6 +314,12 @@ async def delete_media(case_id: str, media_id: str, db: AsyncSession = Depends(g
     )
     derived_paths = [Path(artifact.storage_path) for artifact in artifact_result.scalars().all()]
     await db.delete(media)
+    await db.flush()
+    remaining = (await db.execute(select(SourceMedia.status).where(SourceMedia.case_id == case_id))).scalars().all()
+    case = await _get_case_or_404(case_id, db)
+    case.status = (CaseStatus.DRAFT if not remaining else
+                   CaseStatus.READY if all(item == MediaStatus.INDEXED for item in remaining) else
+                   CaseStatus.PROCESSING)
     await db.commit()
     original_path.unlink(missing_ok=True)
     for path in derived_paths:

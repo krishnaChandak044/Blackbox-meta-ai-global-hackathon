@@ -43,13 +43,11 @@ async def create_case(
 
 @router.get("/", response_model=list[CaseResponse])
 async def list_cases(db: AsyncSession = Depends(get_db)) -> list[CaseResponse]:
-    result = await db.execute(select(Case).order_by(Case.created_at.desc()))
-    cases = result.scalars().all()
+    counts = select(SourceMedia.case_id, func.count().label("media_count")).group_by(SourceMedia.case_id).subquery()
+    result = await db.execute(select(Case, func.coalesce(counts.c.media_count, 0)).outerjoin(counts, Case.id == counts.c.case_id).order_by(Case.created_at.desc()))
 
     responses = []
-    for case in cases:
-        mc_result = await db.execute(select(func.count()).where(SourceMedia.case_id == case.id))
-        media_count = mc_result.scalar() or 0
+    for case, media_count in result.all():
         r = CaseResponse.model_validate(case)
         r.media_count = media_count
         responses.append(r)
@@ -87,7 +85,8 @@ async def update_case(
     await db.commit()
     await db.refresh(case)
     r = CaseResponse.model_validate(case)
-    r.media_count = 0
+    mc_result = await db.execute(select(func.count()).where(SourceMedia.case_id == case_id))
+    r.media_count = mc_result.scalar() or 0
     return r
 
 

@@ -14,6 +14,7 @@ from services.api.db.models import (
     AtlasConsentEvent,
     AtlasContribution,
     Case,
+    CaseStatus,
     ClaimCheck,
     CounterfactualRun,
     DynamicsRun,
@@ -71,6 +72,9 @@ def build_case_export_task(self, export_id: str, job_id: str) -> dict:
             job.status = JobStatus.DONE
             job.progress = 100
             job.completed_at = datetime.now(timezone.utc)
+            case = db.get(Case, record.case_id)
+            if case is not None:
+                case.status = CaseStatus.EXPORTED
             db.add(ProcessingLog(case_id=record.case_id, stage="export", tool_name="blackbox-review-package",
                 tool_version="1.0.0", operator=f"user:{record.created_by}", input_hash=record.case_revision_hash,
                 output_hash=record.manifest_sha256, notes=f"Export {export_id} completed; PDF and JSON hashes recorded."))

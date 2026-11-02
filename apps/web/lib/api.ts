@@ -174,8 +174,10 @@ export const mediaApi = {
   checkIntegrity: (caseId: string, mediaId: string) =>
     req<IntegrityCheck>(`/cases/${caseId}/media/${mediaId}/integrity`),
 
-  delete: (caseId: string, mediaId: string) =>
-    fetch(`${V1}/cases/${caseId}/media/${mediaId}`, { method: "DELETE", credentials: "include" }),
+  delete: async (caseId: string, mediaId: string) => {
+    const response = await fetch(`${V1}/cases/${caseId}/media/${mediaId}`, { method: "DELETE", credentials: "include" });
+    if (!response.ok) throw new Error(`Could not remove clip (HTTP ${response.status}).`);
+  },
 };
 
 /* ── Jobs API ─────────────────────────────────────────────────────────────── */

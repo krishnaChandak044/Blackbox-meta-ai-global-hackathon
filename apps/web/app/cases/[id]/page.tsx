@@ -61,6 +61,12 @@ export default function CaseDetailPage() {
   }, [id]);
 
   useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    if (!media.some(item => item.status === "stored" || item.status === "probing") &&
+        !jobs.some(item => item.status === "queued" || item.status === "running" || item.status === "retrying")) return;
+    const timer = window.setInterval(() => { void refresh(); }, 3000);
+    return () => window.clearInterval(timer);
+  }, [media, jobs, refresh]);
 
   const handleFiles = async (files: FileList | File[]) => {
     const dropped = Array.from(files);
@@ -68,7 +74,7 @@ export default function CaseDetailPage() {
     if (dropped.length !== valid.length) setActionError("Choose a video file such as MP4, MOV, AVI, or WebM. Other file types were skipped.");
     const pendingCount = uploads.filter((item) => item.status === "pending" || item.status === "uploading").length;
     const slots = Math.max(0, 3 - media.length - pendingCount);
-    setActionError(null);
+    if (dropped.length === valid.length) setActionError(null);
     if (valid.length > slots) setActionError(`This case accepts up to 3 clips. Only ${slots} more ${slots === 1 ? "clip can" : "clips can"} be added.`);
     const arr = valid.slice(0, slots);
     if (!arr.length) return;
@@ -85,8 +91,16 @@ export default function CaseDetailPage() {
         });
         setUploads(prev => prev.map(u => u.file === file ? { ...u, status: "done", progress: 100, result } : u));
         setMedia(prev => [...prev, result]);
+        await refresh();
       } catch (e: unknown) {
-        setUploads(prev => prev.map(u => u.file === file ? { ...u, status: "error", error: (e as Error).message } : u));
+        const message = (e as Error).message;
+        if (message.includes("Media was saved")) {
+          await refresh();
+          setUploads(prev => prev.map(u => u.file === file ? { ...u, status: "done", progress: 100 } : u));
+          setActionError("The clip was saved, but processing did not start. Use Retry processing on the saved clip.");
+        } else {
+          setUploads(prev => prev.map(u => u.file === file ? { ...u, status: "error", error: message } : u));
+        }
       }
     }
   };
@@ -107,8 +121,12 @@ export default function CaseDetailPage() {
 
   const deleteMedia = async (m: SourceMedia) => {
     if (!confirm(`Delete "${m.original_filename}"? This cannot be undone.`)) return;
-    await mediaApi.delete(id, m.id);
-    setMedia(prev => prev.filter(x => x.id !== m.id));
+    try {
+      await mediaApi.delete(id, m.id);
+      setMedia(prev => prev.filter(x => x.id !== m.id));
+    } catch (e) {
+      setActionError((e as Error).message);
+    }
   };
 
   if (loading) return (
