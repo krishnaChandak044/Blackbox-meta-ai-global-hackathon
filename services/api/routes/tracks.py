@@ -13,6 +13,8 @@ DELETE /cases/{case_id}/media/{media_id}/tracks/{id}    — delete one track
 
 from __future__ import annotations
 
+import json
+import os
 import uuid
 from datetime import datetime, timezone
 
@@ -27,6 +29,7 @@ from services.api.db.models import (
     JobStatus,
     ObjectTrack,
     ProcessingJob,
+    ProcessingLog,
     SourceMedia,
     TrackPointRow,
 )
@@ -89,6 +92,10 @@ class PointCorrection(BaseModel):
     bbox_y_min: float = Field(..., ge=0)
     bbox_x_max: float = Field(..., gt=0)
     bbox_y_max: float = Field(..., gt=0)
+
+
+class TrackingRunRequest(BaseModel):
+    confirm_external_processing: bool = False
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -167,6 +174,7 @@ async def get_track(
 async def run_tracking(
     case_id: str,
     media_id: str,
+    payload: TrackingRunRequest,
     db: AsyncSession = Depends(get_db),
     user: str = Depends(current_user),
 ) -> dict:
@@ -176,7 +184,13 @@ async def run_tracking(
     Any existing tracks will be replaced when the job completes.
     Returns the queued job ID so the client can poll /jobs/{id}.
     """
-    await _get_media_or_404(case_id, media_id, db)
+    media = await _get_media_or_404(case_id, media_id, db)
+    sam_key = os.getenv("SAM_API_KEY") or os.getenv("MODEL_API_KEY", "")
+    if sam_key and not payload.confirm_external_processing:
+        raise HTTPException(
+            status_code=409,
+            detail="Confirm that this original clip may be sent to Meta Model API before running SAM 3.1.",
+        )
 
     job = ProcessingJob(
         id=str(uuid.uuid4()),
@@ -186,6 +200,23 @@ async def run_tracking(
         status=JobStatus.QUEUED,
     )
     db.add(job)
+    if sam_key:
+        db.add(ProcessingLog(
+            case_id=case_id,
+            media_id=media_id,
+            stage="track_external_consent",
+            tool_name="sam-3.1-meta-api",
+            tool_version="1",
+            input_hash=media.sha256,
+            parameters=json.dumps({
+                "consent_to_external_processing": True,
+                "job_id": job.id,
+                "provider": "Meta Model API",
+                "source_sha256": media.sha256,
+            }, sort_keys=True),
+            operator=f"user:{user}",
+            notes="User explicitly authorized sending this clip to Meta Model API for SAM 3.1 tracking.",
+        ))
     await db.commit()
 
     # Dispatch Celery task
@@ -201,7 +232,7 @@ async def run_tracking(
         await db.commit()
         raise HTTPException(status_code=503, detail="Worker unavailable") from exc
 
-    return {"job_id": job.id, "status": "queued"}
+    return {"job_id": job.id, "status": "queued", "tracker": "sam-3.1" if sam_key else "local-motion"}
 
 
 # ── Human confirm ──────────────────────────────────────────────────────────────

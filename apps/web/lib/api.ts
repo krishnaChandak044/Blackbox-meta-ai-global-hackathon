@@ -357,8 +357,10 @@ export const tracksApi = {
   get: (caseId: string, mediaId: string, trackId: string) =>
     req<TrackDetail>(`/cases/${caseId}/media/${mediaId}/tracks/${trackId}`),
 
-  run: (caseId: string, mediaId: string) =>
-    req<{ job_id: string }>(`/cases/${caseId}/media/${mediaId}/tracks/run`, { method: "POST" }),
+  run: (caseId: string, mediaId: string, confirmExternalProcessing: boolean) =>
+    req<{ job_id: string; status: string; tracker: string }>(`/cases/${caseId}/media/${mediaId}/tracks/run`, {
+      method: "POST", body: JSON.stringify({ confirm_external_processing: confirmExternalProcessing }),
+    }),
 
   confirm: (caseId: string, mediaId: string, trackId: string) =>
     req<TrackSummary>(
