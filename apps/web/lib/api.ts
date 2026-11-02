@@ -138,12 +138,24 @@ export const mediaApi = {
         if (xhr.status === 201) {
           resolve(JSON.parse(xhr.responseText) as SourceMedia);
         } else {
-          if (xhr.status === 401) { window.location.href = "/login"; reject(new Error("Authentication required")); return; }
-          const err = JSON.parse(xhr.responseText);
-          reject(new Error(err.detail ?? "Upload failed"));
+          if (xhr.status === 401) {
+            const next = `${window.location.pathname}${window.location.search}`;
+            window.location.assign(`/login?next=${encodeURIComponent(next)}`);
+            reject(new Error("Your session expired. Sign in again to retry the upload."));
+            return;
+          }
+          let detail: string | undefined;
+          try {
+            detail = JSON.parse(xhr.responseText)?.detail;
+          } catch {
+            // Proxies and unhandled server errors may return plain text.
+          }
+          reject(new Error(detail ?? `Upload failed (HTTP ${xhr.status}). The clip was not added.`));
         }
       };
-      xhr.onerror = () => reject(new Error("Network error during upload"));
+      xhr.onerror = () => reject(new Error(
+        "The upload connection was interrupted. Check that the backend is reachable and retry; the clip was not added.",
+      ));
       xhr.send(fd);
     });
   },

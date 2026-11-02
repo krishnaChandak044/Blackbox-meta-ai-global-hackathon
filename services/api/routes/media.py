@@ -130,6 +130,11 @@ async def upload_media(
         status=MediaStatus.STORED,
     )
     db.add(media)
+    # ProcessingJob has a foreign key to source_media. Flush the media row
+    # before adding the job so PostgreSQL never attempts the dependent insert
+    # before its referenced row exists (the ORM has no media relationship on
+    # ProcessingJob to infer this ordering automatically).
+    await db.flush()
 
     # Queue probe job
     job = ProcessingJob(
