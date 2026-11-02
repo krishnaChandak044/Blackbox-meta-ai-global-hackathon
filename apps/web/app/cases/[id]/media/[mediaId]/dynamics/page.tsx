@@ -15,6 +15,12 @@ export default function DynamicsPage({ params }: { params: { id: string; mediaId
   const [result, setResult] = useState<DynamicsRun | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const usableFit = !!fit
+    && fit.reprojection_rmse_px <= 5
+    && fit.condition_number <= 1000
+    && fit.scale_metres_per_pixel != null
+    && fit.scale_relative_error != null
+    && fit.scale_relative_error <= 0.1;
 
   const load = useCallback(async () => {
     try {
@@ -29,7 +35,7 @@ export default function DynamicsPage({ params }: { params: { id: string; mediaId
   useEffect(() => { void load(); }, [load]);
 
   const run = async () => {
-    if (!trackId || !fit) return;
+    if (!trackId || !fit || !usableFit) return;
     setBusy(true); setError(null);
     try {
       const queued = await phase4Api.queueDynamics(caseId, mediaId, { track_id: trackId, calibration_fit_id: fit.id, seed: 42 });
@@ -56,15 +62,17 @@ export default function DynamicsPage({ params }: { params: { id: string; mediaId
     <div className="page-header"><p><Link href={`/cases/${caseId}`}>Case</Link> / Media / Phase 4</p><h1>Dynamics report</h1><p>Track-only fit. This is an analysis under declared assumptions, not a legal fault finding.</p></div>
     {error && <div className="alert alert-error">{error}</div>}
     <section className="card card-body" style={{ marginBottom: 20 }}>
-      <h2 className="heading-sm">Run calibrated motion fit</h2>
-      <p className="text-sm">Select a reviewer-confirmed vehicle track. Testimony is not used in this fit.</p>
+      <h2 className="heading-sm">Physical motion analysis</h2>
+      <p className="text-sm">Optional advanced analysis. It requires a fixed-camera clip and a reviewed calibration with a measured distance. You can review video and tracks without this step; no speed or fault finding is produced from uncalibrated footage.</p>
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "end" }}>
         <label className="form-label">Vehicle track<select className="form-input" value={trackId} onChange={(e) => setTrackId(e.target.value)}>
           <option value="">Select a confirmed track</option>{tracks.filter((t) => t.is_human_confirmed).map((t) => <option key={t.id} value={t.id}>{t.category} · {t.point_count} points · {t.id.slice(0, 8)}</option>)}
         </select></label>
-        <span className="badge badge-neutral">{fit ? `Scale error ${(fit.scale_relative_error! * 100).toFixed(1)}% · homography RMSE ${fit.reprojection_rmse_px.toFixed(2)} px` : "Calibration required"}</span>
-        <button className="btn btn-primary" disabled={!fit || !trackId || busy} onClick={() => void run()}>{busy ? "Fitting…" : "Run dynamics fit"}</button>
+        <span className="badge badge-neutral">{usableFit ? `Scale check ${(fit!.scale_relative_error! * 100).toFixed(1)}% · anchor residual ${fit!.reprojection_rmse_px.toFixed(2)} px` : "No validated metric calibration"}</span>
+        <button className="btn btn-primary" disabled={!usableFit || !trackId || busy} onClick={() => void run()}>{busy ? "Calculating…" : "Run physical motion analysis"}</button>
       </div>
+      {!usableFit && <div className="alert alert-info" style={{ marginTop: 16 }}><strong>Physical measurements unavailable.</strong> A valid fixed-camera calibration with a measured distance is required. The source video and pixel-level tracks remain reviewable without it. <Link href={`/cases/${caseId}/media/${mediaId}/calibration`}>Open optional reviewer calibration</Link></div>}
+      {usableFit && <p className="text-xs" style={{ marginBottom: 0, marginTop: 12 }}>Anchor residual measures agreement with entered points; it does not independently verify that their real-world measurements are correct.</p>}
       {tracks.length > 0 && !tracks.some((t) => t.is_human_confirmed) && <p className="text-sm">Confirm a vehicle track in the Tracks review page before fitting.</p>}
     </section>
     {result && <>

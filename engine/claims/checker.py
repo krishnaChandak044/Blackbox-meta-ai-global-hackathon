@@ -252,8 +252,8 @@ def check_claim(
                 evidence_frame_end=None,
                 evidence_world_positions=None,
                 explanation=(
-                    "Speed cannot be verified: no ground-plane calibration (scale) is available. "
-                    "Go to Calibration, place ≥4 anchors, mark a known-distance pair, and fit the homography."
+                    "Speed cannot be verified from this clip because a validated real-world scale is unavailable. "
+                    "The video and relative timing can still be reviewed; do not estimate speed from guessed scene measurements."
                 ),
                 checked_at=now,
             )
@@ -297,8 +297,8 @@ def check_claim(
                 evidence_frame_end=f1,
                 evidence_world_positions=wpos or None,
                 explanation=(
-                    "Insufficient consecutive world positions to compute a reliable speed estimate. "
-                    "Ensure camera calibration covers the vehicle's path during the assertion time window."
+                    "There are not enough reliable physical-position observations to estimate speed. "
+                    "The video and relative timing remain reviewable, but this claim cannot be checked in real units from the available evidence."
                 ),
                 checked_at=now,
             )

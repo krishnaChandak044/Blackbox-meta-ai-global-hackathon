@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import subprocess
 import uuid
 from dataclasses import asdict
@@ -28,6 +29,11 @@ from services.api.db.models import (
     ObjectTrack, ProcessingJob, SourceMedia, TrackPointRow,
 )
 from services.api.db.session import get_db
+from engine.geometry.homography import (
+    MIN_ANCHORS,
+    MAX_ACCEPTABLE_CONDITION_NUMBER,
+    MAX_ACCEPTABLE_REPROJECTION_RMSE_PX,
+)
 
 router = APIRouter(prefix="/cases/{case_id}/media/{media_id}", tags=["dynamics"])
 
@@ -150,8 +156,26 @@ async def queue_dynamics(
 
     if hf.scale_metres_per_pixel is None or hf.scale_relative_error is None:
         raise HTTPException(422, "calibration_invalid: scale and its relative error are required")
-    if hf.reprojection_rmse_px is None or hf.reprojection_rmse_px <= 0:
-        raise HTTPException(422, "calibration_invalid: positive homography RMSE is required")
+    if (
+        hf.anchor_count < MIN_ANCHORS + 1
+        or hf.validation_anchor_count < 1
+        or
+        hf.reprojection_rmse_px is None
+        or not math.isfinite(hf.reprojection_rmse_px)
+        or hf.reprojection_rmse_px > MAX_ACCEPTABLE_REPROJECTION_RMSE_PX
+    ):
+        raise HTTPException(
+            422,
+            f"calibration_quality_rejected: reprojection error must be ≤{MAX_ACCEPTABLE_REPROJECTION_RMSE_PX:.1f} px",
+        )
+    if (
+        hf.condition_number is None
+        or not math.isfinite(hf.condition_number)
+        or hf.condition_number > MAX_ACCEPTABLE_CONDITION_NUMBER
+    ):
+        raise HTTPException(422, "calibration_quality_rejected: ground-plane points are geometrically unstable")
+    if not math.isfinite(hf.scale_relative_error) or hf.scale_relative_error > 0.10:
+        raise HTTPException(422, "calibration_quality_rejected: measured scale error exceeds 10%")
     if media.sha256 is None:
         raise HTTPException(422, "media_hash_missing: source media hash is required")
 
@@ -242,7 +266,7 @@ async def get_dynamics(
     Returns run status, fit results, uncertainty, certificates.
     Stale runs (track/calibration changed) are surfaced — not silently reused.
     """
-    await _require_case_media(case_id, media_id, db)
+    media = await _require_case_media(case_id, media_id, db)
 
     result = await db.execute(
         select(DynamicsRun)
@@ -261,11 +285,25 @@ async def get_dynamics(
     )
     pts = pts_result.scalars().all()
     current_fit = await db.execute(
-        select(HomographyFit.id).where(
+        select(HomographyFit).where(
             HomographyFit.media_id == media_id, HomographyFit.is_active.is_(True)
         ).order_by(HomographyFit.fitted_at.desc()).limit(1)
     )
-    active_fit_id = current_fit.scalar_one_or_none()
+    current_fit_row = current_fit.scalar_one_or_none()
+    active_fit_id = None
+    if current_fit_row and (
+        current_fit_row.anchor_count >= MIN_ANCHORS + 1
+        and current_fit_row.validation_anchor_count >= 1
+        and math.isfinite(current_fit_row.reprojection_rmse_px)
+        and current_fit_row.reprojection_rmse_px <= MAX_ACCEPTABLE_REPROJECTION_RMSE_PX
+        and math.isfinite(current_fit_row.condition_number)
+        and current_fit_row.condition_number <= MAX_ACCEPTABLE_CONDITION_NUMBER
+        and current_fit_row.scale_metres_per_pixel is not None
+        and current_fit_row.scale_relative_error is not None
+        and math.isfinite(current_fit_row.scale_relative_error)
+        and current_fit_row.scale_relative_error <= 0.10
+    ):
+        active_fit_id = current_fit_row.id
     if dr.status == "done" and (
         _hash_track_points(pts) != dr.track_version_hash
         or active_fit_id != dr.calibration_fit_id

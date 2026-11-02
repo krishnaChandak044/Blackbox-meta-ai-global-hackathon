@@ -292,6 +292,7 @@ class HomographyFit(Base):
     )
     case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"))
     anchor_count: Mapped[int] = mapped_column(Integer)
+    validation_anchor_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     reprojection_rmse_px: Mapped[float] = mapped_column(Float)
     condition_number: Mapped[float] = mapped_column(Float)
     scale_metres_per_pixel: Mapped[float | None] = mapped_column(Float)

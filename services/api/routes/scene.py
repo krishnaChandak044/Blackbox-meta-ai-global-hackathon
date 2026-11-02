@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from engine.geometry.homography import homography_fit_is_usable
 from engine.scene3d import build_scene_payload
 from services.api.auth.session import current_user
 from services.api.db.models import (
@@ -46,6 +47,22 @@ async def get_scene(case_id: str, media_id: str,
         HomographyFit.case_id == case_id, HomographyFit.media_id == media_id,
         HomographyFit.is_active.is_(True)
     ).order_by(HomographyFit.fitted_at.desc()).limit(1))).scalar_one_or_none()
+    if fit and not homography_fit_is_usable(
+        anchor_count=fit.anchor_count,
+        validation_anchor_count=fit.validation_anchor_count,
+        reprojection_rmse_px=fit.reprojection_rmse_px,
+        condition_number=fit.condition_number,
+        scale_metres_per_pixel=fit.scale_metres_per_pixel,
+        scale_relative_error=fit.scale_relative_error,
+        require_metric_scale=True,
+    ):
+        fit = None
+    if fit is None:
+        for track_payload in tracks:
+            for point in track_payload["points"]:
+                point["world_x_m"] = None
+                point["world_y_m"] = None
+                point["sigma_m"] = None
     dynamics = (await db.execute(select(DynamicsRun).where(
         DynamicsRun.case_id == case_id, DynamicsRun.media_id == media_id, DynamicsRun.status == "done"
     ).order_by(DynamicsRun.id))).scalars().all()

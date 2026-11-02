@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 import subprocess
 import uuid
 from dataclasses import asdict
@@ -23,6 +24,11 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 
 from engine.dynamics.inference import run_inference, InferenceRejected
+from engine.geometry.homography import (
+    MIN_ANCHORS,
+    MAX_ACCEPTABLE_CONDITION_NUMBER,
+    MAX_ACCEPTABLE_REPROJECTION_RMSE_PX,
+)
 from services.api.db.models import (
     DynamicsRun, HomographyFit, JobStatus, ObjectTrack,
     ProcessingJob, ProcessingLog, SourceMedia, TrackPointRow,
@@ -157,6 +163,21 @@ def _run(db, dynamics_run_id: str) -> dict:
     hf = db.get(HomographyFit, dr.calibration_fit_id)
     if hf is None or not hf.is_active:
         raise InferenceRejected(f"calibration_stale: active HomographyFit {dr.calibration_fit_id!r} not found")
+    if (
+        hf.anchor_count < MIN_ANCHORS + 1
+        or hf.validation_anchor_count < 1
+        or hf.reprojection_rmse_px is None
+        or not math.isfinite(hf.reprojection_rmse_px)
+        or hf.reprojection_rmse_px > MAX_ACCEPTABLE_REPROJECTION_RMSE_PX
+        or hf.condition_number is None
+        or not math.isfinite(hf.condition_number)
+        or hf.condition_number > MAX_ACCEPTABLE_CONDITION_NUMBER
+        or hf.scale_metres_per_pixel is None
+        or hf.scale_relative_error is None
+        or not math.isfinite(hf.scale_relative_error)
+        or hf.scale_relative_error > 0.10
+    ):
+        raise InferenceRejected("calibration_quality_rejected: physical motion analysis requires a validated calibration")
 
     calibration = {
         "metres_per_pixel": hf.scale_metres_per_pixel,

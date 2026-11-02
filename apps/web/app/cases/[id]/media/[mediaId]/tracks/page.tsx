@@ -137,7 +137,7 @@ export default function TracksPage({ params }: PageProps) {
               className="btn btn-ghost"
               style={{ fontSize: 13 }}
             >
-              ⊞ Calibration
+              Optional scale setup
             </Link>
             <button
               className="btn btn-primary"
@@ -154,6 +154,12 @@ export default function TracksPage({ params }: PageProps) {
           <input type="checkbox" checked={confirmMetaProcessing} onChange={(event) => setConfirmMetaProcessing(event.target.checked)} />
           <span>If SAM 3.1 is configured, I authorize sending this original clip to Meta Model API for object tracking. This uses Meta API credits. Otherwise, Blackbox uses its local motion tracker. The original stored in this case is not modified.</span>
         </label>
+
+        <div className="card" style={{ padding: "12px 16px", maxWidth: 900, borderLeft: "3px solid var(--sky-mid)" }}>
+          <strong className="text-sm">You can review tracks without calibration.</strong>
+          <p className="text-sm text-secondary" style={{ margin: "4px 0 6px" }}>This page shows detections and video timing. Physical speed and distance are optional and only available when a reviewer can validate a stationary-camera scene with measured road points. Moving dashcam footage usually won’t support this ground-plane method.</p>
+          <Link href={`/cases/${caseId}/media/${mediaId}/calibration`} className="text-sm">Open optional reviewer scale setup →</Link>
+        </div>
 
         {error && <div className="alert alert-error">{error}</div>}
 

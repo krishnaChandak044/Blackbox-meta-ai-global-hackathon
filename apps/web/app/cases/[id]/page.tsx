@@ -156,8 +156,8 @@ export default function CaseDetailPage() {
         </div>
 
         <div className="phase5-entry card mb-6">
-          <div><strong>Phase 5 review tools</strong><p className="text-sm text-secondary mt-1">Evidence Rescue Radar, Prevention Atlas consent, and traceable PDF/JSON exports.</p></div>
-          <Link href={`/cases/${id}/phase5`} className="btn btn-primary">Open review tools →</Link>
+          <div><strong>Evidence review tools</strong><p className="text-sm text-secondary mt-1">Compare clips on a shared timeline, mark source frames, inspect audio candidates, and create traceable exports.</p></div>
+          <div className="flex gap-2" style={{ flexWrap: "wrap" }}><Link href={`/cases/${id}/review-workspace`} className="btn btn-primary">Open synchronized review →</Link><Link href={`/cases/${id}/phase5`} className="btn btn-secondary">Rescue Radar &amp; exports</Link></div>
         </div>
 
         {/* Source Media */}
@@ -168,6 +168,7 @@ export default function CaseDetailPage() {
               <p className="text-sm text-secondary mt-2">
                 Original bytes stored unchanged. SHA-256 verified on every re-download.
               </p>
+              <p className="text-sm text-secondary mt-1">Upload and review clips without measuring the scene. Physical speed and distance are optional and may be unavailable for moving or uncalibrated footage.</p>
             </div>
           </div>
 
@@ -293,7 +294,7 @@ export default function CaseDetailPage() {
                           </td>
                           <td>
                             <Link className="btn btn-ghost btn-sm" href={`/cases/${id}/media/${m.id}/tracks`}>Tracks</Link>
-                            <Link className="btn btn-ghost btn-sm" href={`/cases/${id}/media/${m.id}/calibration`}>Calibrate</Link>
+                            <Link className="btn btn-ghost btn-sm" href={`/cases/${id}/media/${m.id}/calibration`}>Optional scale setup</Link>
                             <Link className="btn btn-ghost btn-sm" href={`/cases/${id}/media/${m.id}/dynamics`}>Dynamics</Link>
                             <Link className="btn btn-ghost btn-sm" href={`/cases/${id}/media/${m.id}/scene3d`}>3D replay</Link>
                             <button className="btn btn-ghost btn-sm" onClick={() => mediaApi.downloadOriginal(id, m.id, m.original_filename)}>Download original</button>

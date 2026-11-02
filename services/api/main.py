@@ -14,7 +14,8 @@ from services.api.auth.session import _password, _secret, is_authenticated
 from services.api.auth.session import router as auth_router
 from services.api.db.session import init_db
 from services.api.routes import (atlas, calibration, cases, claims, dynamics, exports, jobs,
-                                 media, rescue, rivals, scene, simulation, tracks, transcripts)
+                                 media, rescue, rivals, scene, simulation, tracks, transcripts,
+                                 review_workspace)
 
 logger = structlog.get_logger()
 
@@ -64,6 +65,7 @@ app.include_router(scene.router, prefix=PREFIX)
 app.include_router(rescue.router, prefix=PREFIX)
 app.include_router(atlas.router, prefix=PREFIX)
 app.include_router(exports.router, prefix=PREFIX)
+app.include_router(review_workspace.router, prefix=PREFIX)
 
 
 @app.get("/health", tags=["health"])

@@ -1,6 +1,6 @@
 """Claims router - part 1."""
 from __future__ import annotations
-import asyncio, json, uuid
+import asyncio, json, math, uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -9,6 +9,11 @@ from services.api.auth.session import current_user
 from services.api.db.models import Case, ClaimCheck, HomographyFit, JobStage, JobStatus, ObjectTrack, ProcessingJob, SourceMedia, TrackPointRow, Transcript, TranscriptClaim
 from services.api.db.session import get_db
 from services.api.schemas.claim import ClaimCheckResponse, TranscriptClaimResponse, TranscriptClaimUpdate
+from engine.geometry.homography import (
+    MIN_ANCHORS,
+    MAX_ACCEPTABLE_CONDITION_NUMBER,
+    MAX_ACCEPTABLE_REPROJECTION_RMSE_PX,
+)
 
 router = APIRouter(prefix="/cases/{case_id}/claims", tags=["claims"])
 async def _get_case_or_404(case_id: str, db: AsyncSession) -> Case:
@@ -73,7 +78,14 @@ async def check_claim(case_id: str, claim_id: str, db: AsyncSession = Depends(ge
         trks = list((await db.execute(select(ObjectTrack).where(ObjectTrack.media_id == mid))).scalars().all())
         qr = await db.execute(select(HomographyFit).where(HomographyFit.media_id == mid, HomographyFit.is_active == True).order_by(HomographyFit.fitted_at.desc()).limit(1))  # noqa: E712
         hom = qr.scalar_one_or_none()
-        if hom:
+        if hom and (
+            hom.anchor_count >= MIN_ANCHORS + 1
+            and hom.validation_anchor_count >= 1
+            and math.isfinite(hom.reprojection_rmse_px)
+            and hom.reprojection_rmse_px <= MAX_ACCEPTABLE_REPROJECTION_RMSE_PX
+            and math.isfinite(hom.condition_number)
+            and hom.condition_number <= MAX_ACCEPTABLE_CONDITION_NUMBER
+        ):
             hid = hom.id
             try:
                 import numpy as np
