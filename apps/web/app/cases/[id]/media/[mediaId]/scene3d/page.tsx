@@ -20,11 +20,11 @@ export default function ScenePage() {
 
   return (
     <main className="page-content scene-page fade-in">
-      <div className="phase5-nav"><Link href={`/cases/${caseId}`}>← Back to case</Link><Link href={`/cases/${caseId}/phase5`}>Evidence &amp; exports →</Link></div>
+      <div className="phase5-nav"><Link href={`/cases/${caseId}`}>← Back to case</Link><Link href={`/cases/${caseId}/reports`}>Evidence &amp; reports →</Link></div>
       <header className="page-header">
-        <p className="eyebrow">Phase 5 · 3D replay</p>
-        <h1>Ground-plane scene</h1>
-        <p>Positions come directly from stored engine coordinates. Drag to orbit, adjust elevation, or scrub observed track time.</p>
+        <p className="eyebrow">Evidence review · Visual replay</p>
+        <h1>3D scene replay</h1>
+        <p>Explore the reviewed track positions in three dimensions. Drag to orbit, adjust elevation, or scrub through the observed timeline.</p>
       </header>
       {error && <div className="alert alert-error mb-4" role="alert">{error}<button className="btn btn-secondary btn-sm" style={{ marginLeft: 12 }} onClick={() => void load()}>Retry</button></div>}
       {loading && <div className="card card-body flex items-center gap-3"><div className="spinner" /> Loading scene data…</div>}

@@ -130,7 +130,7 @@ export default function RadarPanel({ caseId }: { caseId: string }) {
       <div className="flex items-start justify-between gap-4 mb-4">
         <div>
           <p className="eyebrow">Evidence collection</p>
-          <h2 id="radar-heading">Evidence Rescue Radar</h2>
+          <h2 id="radar-heading">Missing evidence checklist</h2>
           <p className="text-sm text-secondary mt-2">
             Suggestions are heuristics. Sources and retention deadlines remain unknown until a person verifies them.
           </p>

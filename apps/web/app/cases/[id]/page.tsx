@@ -39,6 +39,7 @@ export default function CaseDetailPage() {
   const [jobs, setJobs]       = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [integrity, setIntegrity] = useState<Record<string, IntegrityCheck>>({});
@@ -62,7 +63,14 @@ export default function CaseDetailPage() {
   useEffect(() => { refresh(); }, [refresh]);
 
   const handleFiles = async (files: FileList | File[]) => {
-    const arr = Array.from(files).filter(f => f.type.startsWith("video/"));
+    const dropped = Array.from(files);
+    const valid = dropped.filter(f => f.type.startsWith("video/"));
+    if (dropped.length !== valid.length) setActionError("Choose a video file such as MP4, MOV, AVI, or WebM. Other file types were skipped.");
+    const pendingCount = uploads.filter((item) => item.status === "pending" || item.status === "uploading").length;
+    const slots = Math.max(0, 3 - media.length - pendingCount);
+    setActionError(null);
+    if (valid.length > slots) setActionError(`This case accepts up to 3 clips. Only ${slots} more ${slots === 1 ? "clip can" : "clips can"} be added.`);
+    const arr = valid.slice(0, slots);
     if (!arr.length) return;
 
     const items: UploadItem[] = arr.map(f => ({ file: f, progress: 0, status: "pending" }));
@@ -84,8 +92,17 @@ export default function CaseDetailPage() {
   };
 
   const checkIntegrity = async (m: SourceMedia) => {
-    const result = await mediaApi.checkIntegrity(id, m.id);
-    setIntegrity(prev => ({ ...prev, [m.id]: result }));
+    try {
+      const result = await mediaApi.checkIntegrity(id, m.id);
+      setIntegrity(prev => ({ ...prev, [m.id]: result }));
+    } catch (e) {
+      setActionError(`Could not verify ${m.original_filename}: ${(e as Error).message}`);
+    }
+  };
+
+  const retryUpload = (file: File) => {
+    setUploads((previous) => previous.filter((item) => item.file !== file));
+    void handleFiles([file]);
   };
 
   const deleteMedia = async (m: SourceMedia) => {
@@ -151,20 +168,21 @@ export default function CaseDetailPage() {
             <MetaItem label="Jurisdiction" value={kase.jurisdiction ?? "—"} />
             <MetaItem label="Incident date" value={kase.incident_date ? new Date(kase.incident_date).toLocaleString() : "—"} />
             <MetaItem label="Consent"    value={kase.consent_given ? "Given ✓" : "Not given"} />
-            <MetaItem label="Clips"      value={`${media.length} / 3`} />
+            <MetaItem label="Footage files" value={`${media.length} / 3`} />
           </div>
         </div>
 
         <div className="phase5-entry card mb-6">
-          <div><strong>Evidence review tools</strong><p className="text-sm text-secondary mt-1">Compare clips on a shared timeline, mark source frames, inspect audio candidates, and create traceable exports.</p></div>
-          <div className="flex gap-2" style={{ flexWrap: "wrap" }}><Link href={`/cases/${id}/review-workspace`} className="btn btn-primary">Open synchronized review →</Link><Link href={`/cases/${id}/phase5`} className="btn btn-secondary">Rescue Radar &amp; exports</Link></div>
+          {media.length === 0 ? <><div><strong>Start with the footage</strong><p className="text-sm text-secondary mt-1">Add a clip to preserve the original and begin reviewing what it shows.</p></div><Link href="#source-media" className="btn btn-primary">Add footage <span aria-hidden="true">↓</span></Link></> : <><div><strong>Your footage is ready to review</strong><p className="text-sm text-secondary mt-1">Compare clips, add source-linked observations, or prepare a traceable report.</p></div><div className="flex gap-2" style={{ flexWrap: "wrap" }}><Link href={`/cases/${id}/review-workspace`} className="btn btn-primary">Review footage <span aria-hidden="true">→</span></Link><Link href={`/cases/${id}/reports`} className="btn btn-secondary">Evidence &amp; reports</Link></div></>}
         </div>
 
+        {actionError && <div className="alert alert-error mb-4" role="alert"><span>{actionError}</span><button className="btn btn-ghost btn-sm" onClick={() => setActionError(null)}>Dismiss</button></div>}
+
         {/* Source Media */}
-        <section>
+        <section id="source-media">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 style={{ fontSize: "var(--text-xl)" }}>Source Media</h2>
+              <h2 style={{ fontSize: "var(--text-xl)" }}>Original footage</h2>
               <p className="text-sm text-secondary mt-2">
                 Original bytes stored unchanged. SHA-256 verified on every re-download.
               </p>
@@ -198,8 +216,8 @@ export default function CaseDetailPage() {
                   <path d="M24 8v24M16 16l8-8 8 8M8 36h32" strokeLinecap="round" />
                 </svg>
               </div>
-              <h3>Drop video clips here</h3>
-              <p>MP4, MOV, AVI, WebM · up to 500 MB each · {3 - media.length} slot{3 - media.length !== 1 ? "s" : ""} remaining</p>
+              <h3>Choose video clips or drag them here</h3>
+              <p>MP4, MOV, AVI, WebM · up to 500 MB each · {3 - media.length} upload slot{3 - media.length !== 1 ? "s" : ""} available</p>
             </div>
           )}
 
@@ -217,9 +235,10 @@ export default function CaseDetailPage() {
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium">{u.file.name}</span>
                   <span className={`badge ${u.status === "error" ? "badge-rose" : "badge-sky"}`}>
-                    {u.status === "error" ? `Error: ${u.error}` : `${u.progress}%`}
+                    {u.status === "error" ? "Upload failed" : u.status === "done" ? "Saved" : `${u.progress}%`}
                   </span>
                 </div>
+                {u.status === "error" && <div className="upload-error-row"><span>{u.error || "The connection was interrupted."} Your original file is still on this device.</span><button className="btn btn-secondary btn-sm" onClick={() => retryUpload(u.file)}>Retry upload</button></div>}
                 {u.status === "uploading" && (
                   <div className="progress-bar">
                     <div className="progress-bar-fill" style={{ width: `${u.progress}%` }} />
@@ -236,15 +255,11 @@ export default function CaseDetailPage() {
                 <table>
                   <thead>
                     <tr>
-                      <th>Filename</th>
-                      <th>Size</th>
-                      <th>SHA-256</th>
+                      <th>Original clip</th>
                       <th>Status</th>
                       <th>Duration</th>
-                      <th>Codec</th>
-                      <th>VFR</th>
                       <th>Integrity</th>
-                      <th></th>
+                      <th><span className="sr-only">Clip options</span></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -255,28 +270,11 @@ export default function CaseDetailPage() {
                         <tr key={m.id}>
                           <td>
                             <div style={{ fontWeight: 500 }}>{m.original_filename}</div>
-                            <div className="text-xs text-secondary">{relativeTime(m.upload_time)}</div>
-                          </td>
-                          <td className="text-sm">{formatBytes(m.byte_length)}</td>
-                          <td>
-                            <span
-                              className={`hash-display ${integ ? (integ.intact ? "verified" : "failed") : ""}`}
-                              data-tooltip={m.sha256}
-                              onClick={() => navigator.clipboard.writeText(m.sha256)}
-                            >
-                              {shortHash(m.sha256)}
-                            </span>
+                            <div className="text-xs text-secondary">{formatBytes(m.byte_length)} · Added {relativeTime(m.upload_time)}</div>
                           </td>
                           <td><span className={`badge ${ms.cls}`}>{ms.label}</span></td>
                           <td className="text-sm">
                             {m.duration_seconds != null ? `${m.duration_seconds.toFixed(1)}s` : "—"}
-                          </td>
-                          <td className="text-sm font-mono">{m.codec ?? "—"}</td>
-                          <td>
-                            {m.is_variable_framerate == null ? "—" : m.is_variable_framerate
-                              ? <span className="badge badge-sand">VFR</span>
-                              : <span className="badge badge-neutral">CFR</span>
-                            }
                           </td>
                           <td>
                             {integ ? (
@@ -293,18 +291,16 @@ export default function CaseDetailPage() {
                             )}
                           </td>
                           <td>
-                            <Link className="btn btn-ghost btn-sm" href={`/cases/${id}/media/${m.id}/tracks`}>Tracks</Link>
-                            <Link className="btn btn-ghost btn-sm" href={`/cases/${id}/media/${m.id}/calibration`}>Optional scale setup</Link>
-                            <Link className="btn btn-ghost btn-sm" href={`/cases/${id}/media/${m.id}/dynamics`}>Dynamics</Link>
-                            <Link className="btn btn-ghost btn-sm" href={`/cases/${id}/media/${m.id}/scene3d`}>3D replay</Link>
-                            <button className="btn btn-ghost btn-sm" onClick={() => mediaApi.downloadOriginal(id, m.id, m.original_filename)}>Download original</button>
-                            {m.status === "failed" && <button className="btn btn-ghost btn-sm" onClick={async () => { await mediaApi.retry(id, m.id); await refresh(); }}>Retry processing</button>}
-                            <button
-                              className="btn btn-danger btn-sm"
-                              onClick={() => deleteMedia(m)}
-                            >
-                              Remove
-                            </button>
+                            <details className="media-more"><summary>Options</summary><div className="media-more-menu">
+                              <button className="media-option" onClick={() => mediaApi.downloadOriginal(id, m.id, m.original_filename)}>Download original</button>
+                              <button className="media-option" onClick={() => navigator.clipboard.writeText(m.sha256)}>Copy source SHA-256</button>
+                              <span className="media-hash" title={m.sha256}>Source SHA-256 · {shortHash(m.sha256)} · {m.codec ?? "Codec unavailable"} · {m.is_variable_framerate == null ? "Frame rate unknown" : m.is_variable_framerate ? "Variable frame rate" : "Constant frame rate"}</span>
+                              <Link className="media-option" href={`/cases/${id}/media/${m.id}/tracks`}>Review detected tracks</Link>
+                              <Link className="media-option" href={`/cases/${id}/media/${m.id}/scene3d`}>Open 3D replay</Link>
+                              <details className="media-advanced"><summary>Advanced motion analysis</summary><div className="media-option-list"><Link className="media-option" href={`/cases/${id}/media/${m.id}/calibration`}>Set scene scale</Link><Link className="media-option" href={`/cases/${id}/media/${m.id}/dynamics`}>View motion report</Link></div></details>
+                              {m.status === "failed" && <button className="media-option" onClick={async () => { await mediaApi.retry(id, m.id); await refresh(); }}>Retry processing</button>}
+                              <button className="media-option danger" onClick={() => deleteMedia(m)}>Remove clip</button>
+                            </div></details>
                           </td>
                         </tr>
                       );
@@ -317,9 +313,9 @@ export default function CaseDetailPage() {
 
           {media.length === 0 && uploads.length === 0 && (
             <div className="empty-state" style={{ padding: "var(--space-10) 0" }}>
-              <div className="empty-state-icon">01</div>
+              <div className="empty-state-icon">＋</div>
               <h3>No clips yet</h3>
-              <p>Upload 1–3 video clips to begin the investigation.</p>
+              <p>Upload up to three clips. You can still review footage when exact speed or distance cannot be measured.</p>
             </div>
           )}
         </section>
@@ -335,7 +331,7 @@ export default function CaseDetailPage() {
                 <table>
                   <thead>
                     <tr>
-                      <th>Stage</th>
+                      <th>Processing step</th>
                       <th>Status</th>
                       <th>Progress</th>
                       <th>Queued</th>
@@ -345,7 +341,7 @@ export default function CaseDetailPage() {
                   <tbody>
                     {jobs.map((j) => (
                       <tr key={j.id}>
-                        <td className="text-sm font-mono">{j.stage}</td>
+                        <td className="text-sm">{jobLabel(j.stage)}</td>
                         <td>
                           <span className={`badge ${
                             j.status === "done" ? "badge-sage" :
@@ -400,6 +396,20 @@ function MetaItem({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+function jobLabel(stage: string) {
+  const labels: Record<string, string> = {
+    ingest: "Preparing original clip",
+    probe: "Reading video details",
+    media_probe: "Reading video details",
+    tracking: "Finding visible objects",
+    transcription: "Transcribing speech",
+    claim_extraction: "Preparing statement claims",
+    dynamics: "Estimating motion",
+    export: "Preparing case report",
+  };
+  return labels[stage] ?? stage.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 function SidebarShell({ caseId, kaseTitle }: { caseId: string; kaseTitle?: string }) {
   return (
     <aside className="sidebar">
@@ -433,8 +443,8 @@ function SidebarShell({ caseId, kaseTitle }: { caseId: string; kaseTitle?: strin
             <Link href={`/cases/${caseId}/claims`} className="nav-item">
               <span className="nav-item-icon">◈</span> Claims
             </Link>
-            <Link href={`/cases/${caseId}/phase5`} className="nav-item">
-              <span className="nav-item-icon">▧</span> Evidence &amp; exports
+            <Link href={`/cases/${caseId}/reports`} className="nav-item">
+              <span className="nav-item-icon">▧</span> Evidence &amp; reports
             </Link>
           </>
         )}
