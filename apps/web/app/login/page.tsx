@@ -12,7 +12,14 @@ export default function LoginPage() {
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true); setError("");
-    try { await authApi.login(password); router.replace("/cases"); }
+    try {
+      await authApi.login(password);
+      const requested = new URLSearchParams(window.location.search).get("next");
+      const destination = requested?.startsWith("/") && !requested.startsWith("//")
+        ? requested
+        : "/cases";
+      router.replace(destination);
+    }
     catch (err) { setError(err instanceof Error ? err.message : "Sign in failed"); }
     finally { setBusy(false); }
   }

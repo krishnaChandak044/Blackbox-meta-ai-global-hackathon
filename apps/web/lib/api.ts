@@ -4,14 +4,22 @@ const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const V1 = `${BASE}/api/v1`;
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${V1}${path}`, {
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...init?.headers },
-    ...init,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${V1}${path}`, {
+      credentials: "include",
+      headers: { "Content-Type": "application/json", ...init?.headers },
+      ...init,
+    });
+  } catch {
+    throw new Error(`Can't reach the Blackbox API at ${BASE}. Check that the backend is running, then retry.`);
+  }
   if (res.status === 401 && !path.startsWith("/auth/")) {
-    if (typeof window !== "undefined") window.location.href = "/login";
-    throw new Error("Authentication required");
+    if (typeof window !== "undefined") {
+      const next = `${window.location.pathname}${window.location.search}`;
+      window.location.assign(`/login?next=${encodeURIComponent(next)}`);
+    }
+    throw new Error("Your session expired. Sign in again to continue.");
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
@@ -357,8 +365,10 @@ export const tracksApi = {
   get: (caseId: string, mediaId: string, trackId: string) =>
     req<TrackDetail>(`/cases/${caseId}/media/${mediaId}/tracks/${trackId}`),
 
-  run: (caseId: string, mediaId: string) =>
-    req<{ job_id: string }>(`/cases/${caseId}/media/${mediaId}/tracks/run`, { method: "POST" }),
+  run: (caseId: string, mediaId: string, confirmExternalProcessing: boolean) =>
+    req<{ job_id: string; status: string; tracker: string }>(`/cases/${caseId}/media/${mediaId}/tracks/run`, {
+      method: "POST", body: JSON.stringify({ confirm_external_processing: confirmExternalProcessing }),
+    }),
 
   confirm: (caseId: string, mediaId: string, trackId: string) =>
     req<TrackSummary>(

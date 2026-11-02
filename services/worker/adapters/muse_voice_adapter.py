@@ -86,7 +86,7 @@ class MuseVoiceAdapter:
     when this adapter is unavailable.
     """
 
-    TRANSCRIPTION_MODEL = "muse-voice-v1"
+    TRANSCRIPTION_MODEL = "muse-voice-transcribe-1.0"
 
     def __init__(self, api_url: str | None = None, api_key: str | None = None) -> None:
         self.api_url = (api_url or os.getenv("MUSE_VOICE_API_URL", "")).rstrip("/")
@@ -96,8 +96,8 @@ class MuseVoiceAdapter:
     def _endpoint(base_url: str) -> str:
         """Resolve a configured service URL without silently duplicating routes.
 
-        Configure either the transcription endpoint itself or a base URL ending
-        in `/v1/muse/voice`; in the latter case `/transcribe` is appended.
+        Configure either the transcription endpoint itself or the Meta ASR base
+        URL (`https://api.meta.ai/v1/asr`); the latter gets `/transcribe`.
         """
         base = base_url.rstrip("/")
         return base if base.endswith("/transcribe") else f"{base}/transcribe"
@@ -143,7 +143,7 @@ class MuseVoiceAdapter:
                 pathlib.Path(tmp_wav.name).unlink(missing_ok=True)
 
     def _call_api(self, audio_path: str) -> TranscriptResult:
-        headers = {"Authorization": f"Bearer {self.api_key}"}
+        headers = {"Authorization": f"Bearer {self.api_key}", "Accept": "application/json"}
         try:
             with open(audio_path, "rb") as fh:
                 suffix = pathlib.Path(audio_path).suffix.lower()
@@ -151,9 +151,14 @@ class MuseVoiceAdapter:
                     ".mp3": "audio/mpeg", ".flac": "audio/flac", ".ogg": "audio/ogg",
                     ".m4a": "audio/mp4", ".aac": "audio/aac", ".opus": "audio/opus",
                 }.get(suffix)
-                if content_type is None:
-                    raise AdapterUnavailable(f"Unsupported audio format: {suffix or 'unknown'}")
-                files = {"file": (pathlib.Path(audio_path).name, fh, content_type)}
+                if suffix != ".wav" or content_type != "audio/wav":
+                    raise AdapterUnavailable("Muse Voice API requires mono 16-bit WAV at 16 or 24 kHz")
+                if pathlib.Path(audio_path).stat().st_size > 32 * 1024 * 1024:
+                    raise AdapterUnavailable("Muse Voice API file limit is 32 MB")
+                files = {
+                    "request": (None, '{"model":"muse-voice-transcribe-1.0","audioEncoding":"WAV","mode":"DIARIZATION"}', "application/json"),
+                    "audio": (pathlib.Path(audio_path).name, fh, content_type),
+                }
                 resp = httpx.post(
                     self._endpoint(self.api_url),
                     files=files,
@@ -173,11 +178,23 @@ class MuseVoiceAdapter:
         if not isinstance(data, dict):
             raise AdapterUnavailable(f"Unexpected API response type: {type(data)}")
 
-        segments: list[dict] = data.get("segments") or data.get("diarised") or []
+        raw_turns: list[dict] = data.get("turns") or data.get("segments") or data.get("diarised") or []
+        segments = []
+        for turn in raw_turns:
+            if isinstance(turn, dict) and ("startMs" in turn or "endMs" in turn):
+                segments.append({
+                    "speaker": turn.get("speaker") or "unknown",
+                    "start": float(turn.get("startMs", 0)) / 1000.0,
+                    "end": float(turn.get("endMs", 0)) / 1000.0,
+                    "text": turn.get("transcript", turn.get("text", "")),
+                })
+            else:
+                segments.append(turn)
         if not isinstance(segments, list) or any(not isinstance(s, dict) for s in segments):
             raise AdapterUnavailable("Muse Voice response contains malformed segments")
         raw_text: str = (
-            data.get("text")
+            data.get("transcript")
+            or data.get("text")
             or " ".join(s.get("text", "") for s in segments)
         ).strip()
 
@@ -186,9 +203,11 @@ class MuseVoiceAdapter:
 
         return TranscriptResult(
             raw_text=raw_text,
-            language=data.get("language", "en"),
+            language=data.get("language", "und"),
             diarised_segments=self._normalise_segments(segments),
-            duration_seconds=data.get("duration_seconds"),
+            duration_seconds=(data.get("audioDurationMs") / 1000.0
+                              if data.get("audioDurationMs") is not None
+                              else data.get("duration_seconds")),
             transcription_model=self.TRANSCRIPTION_MODEL,
             is_synthetic=False,
         )

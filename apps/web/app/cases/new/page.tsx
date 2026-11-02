@@ -1,14 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { casesApi } from "@/lib/api";
+import { authApi, casesApi } from "@/lib/api";
 
 const STEPS = ["Details", "Consent", "Review"];
 
 export default function NewCasePage() {
   const router = useRouter();
+  const [access, setAccess] = useState<"checking" | "ready" | "offline">("checking");
+  const [accessError, setAccessError] = useState<string | null>(null);
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,6 +24,28 @@ export default function NewCasePage() {
     consent_given: false,
   });
 
+  const checkAccess = async () => {
+    setAccess("checking");
+    setAccessError(null);
+    try {
+      const session = await authApi.session();
+      if (!session.authenticated) {
+        router.replace(`/login?next=${encodeURIComponent("/cases/new")}`);
+        return;
+      }
+      setAccess("ready");
+    } catch (e) {
+      setAccessError(e instanceof Error ? e.message : "Could not check your sign-in.");
+      setAccess("offline");
+    }
+  };
+
+  useEffect(() => {
+    void checkAccess();
+    // Check once when opening the form; retry is an explicit user action.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const set = (k: string, v: string | boolean) =>
     setForm((prev) => ({ ...prev, [k]: v }));
 
@@ -30,6 +54,32 @@ export default function NewCasePage() {
     if (step === 1) return form.consent_given;
     return true;
   };
+
+  if (access !== "ready") {
+    return (
+      <main className="page-content fade-in" style={{ maxWidth: 680, margin: "12vh auto" }}>
+        <div className="card">
+          <div className="card-body">
+            <h1>{access === "checking" ? "Checking workspace access…" : "Can’t connect to Blackbox"}</h1>
+            {access === "checking" ? (
+              <p className="text-secondary" style={{ marginTop: "var(--space-3)" }}>
+                We’ll open the case form after confirming your sign-in.
+              </p>
+            ) : (
+              <>
+                <div className="alert alert-error" role="alert" style={{ marginTop: "var(--space-4)" }}>
+                  <span>⚠</span> {accessError} Your case details haven’t been submitted.
+                </div>
+                <button className="btn btn-primary" onClick={() => void checkAccess()}>
+                  Retry connection
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   const submit = async () => {
     setSubmitting(true);

@@ -39,6 +39,7 @@ export default function TracksPage({ params }: PageProps) {
   const [currentFrame, setCurrentFrame] = useState(0);
   const [loading, setLoading]   = useState(true);
   const [running, setRunning]   = useState(false);
+  const [confirmMetaProcessing, setConfirmMetaProcessing] = useState(false);
   const [error,   setError]     = useState<string | null>(null);
 
   const fps = media?.fps_nominal ?? 30;
@@ -79,7 +80,7 @@ export default function TracksPage({ params }: PageProps) {
   const runTracking = async () => {
     setRunning(true); setError(null);
     try {
-      const queued = await tracksApi.run(caseId, mediaId);
+      const queued = await tracksApi.run(caseId, mediaId, confirmMetaProcessing);
       for (let attempt = 0; attempt < 60; attempt++) {
         await new Promise(resolve => setTimeout(resolve, 1000));
         const job = await jobsApi.get(queued.job_id);
@@ -141,13 +142,18 @@ export default function TracksPage({ params }: PageProps) {
             <button
               className="btn btn-primary"
               onClick={runTracking}
-              disabled={running}
+              disabled={running || !confirmMetaProcessing}
               style={{ fontSize: 13 }}
             >
               {running ? "Tracking…" : summaries.length > 0 ? "Re-run tracking" : "Run tracking"}
             </button>
           </div>
         </div>
+
+        <label className="text-sm" style={{ display: "flex", gap: 8, alignItems: "flex-start", maxWidth: 900 }}>
+          <input type="checkbox" checked={confirmMetaProcessing} onChange={(event) => setConfirmMetaProcessing(event.target.checked)} />
+          <span>If SAM 3.1 is configured, I authorize sending this original clip to Meta Model API for object tracking. This uses Meta API credits. Otherwise, Blackbox uses its local motion tracker. The original stored in this case is not modified.</span>
+        </label>
 
         {error && <div className="alert alert-error">{error}</div>}
 
