@@ -82,7 +82,7 @@ async def _revision_hash(case_id: str, db: AsyncSession) -> str:
         "tracks": [{"id": t.id, "category": t.category, "confirmed": t.is_human_confirmed,
                     "points": point_map[t.id]} for t in tracks],
         "fits": rows_data(fits, ("id", "H_json", "reprojection_rmse_px", "scale_metres_per_pixel",
-            "scale_relative_error", "is_active", "fitted_at")),
+            "scale_relative_error", "validation_anchor_count", "condition_number", "anchor_count", "is_active", "fitted_at")),
         "dynamics": rows_data(dynamics, ("id", "status", "params_json", "fitted_points_json", "uncertainty_json",
             "certificates_json", "fit_quality_json", "error_message")),
         "counterfactuals": rows_data(cf, ("id", "intervention_json", "simulated_points_json", "assumptions_json")),

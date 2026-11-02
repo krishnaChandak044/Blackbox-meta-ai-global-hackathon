@@ -107,7 +107,7 @@ export default function CaseDetailPage() {
     <div className="main-with-sidebar">
       <SidebarShell caseId={id} />
       <div className="page-content">
-        <div className="alert alert-error">⚠ {error ?? "Case not found"}</div>
+        <div className="alert alert-error">!  {error ?? "Case not found"}</div>
         <Link href="/cases" className="btn btn-secondary mt-4">← All Cases</Link>
       </div>
     </div>
@@ -137,7 +137,7 @@ export default function CaseDetailPage() {
                 <span className={`badge ${badge.cls}`}>{badge.label}</span>
               </div>
               {kase.incident_location && (
-                <p className="text-sm text-secondary">📍 {kase.incident_location}</p>
+                <p className="text-sm text-secondary">{kase.incident_location}</p>
               )}
             </div>
           </div>
@@ -156,8 +156,8 @@ export default function CaseDetailPage() {
         </div>
 
         <div className="phase5-entry card mb-6">
-          <div><strong>Phase 5 review tools</strong><p className="text-sm text-secondary mt-1">Evidence Rescue Radar, Prevention Atlas consent, and traceable PDF/JSON exports.</p></div>
-          <Link href={`/cases/${id}/phase5`} className="btn btn-primary">Open review tools →</Link>
+          <div><strong>Evidence review tools</strong><p className="text-sm text-secondary mt-1">Compare clips on a shared timeline, mark source frames, inspect audio candidates, and create traceable exports.</p></div>
+          <div className="flex gap-2" style={{ flexWrap: "wrap" }}><Link href={`/cases/${id}/review-workspace`} className="btn btn-primary">Open synchronized review →</Link><Link href={`/cases/${id}/phase5`} className="btn btn-secondary">Rescue Radar &amp; exports</Link></div>
         </div>
 
         {/* Source Media */}
@@ -168,6 +168,7 @@ export default function CaseDetailPage() {
               <p className="text-sm text-secondary mt-2">
                 Original bytes stored unchanged. SHA-256 verified on every re-download.
               </p>
+              <p className="text-sm text-secondary mt-1">Upload and review clips without measuring the scene. Physical speed and distance are optional and may be unavailable for moving or uncalibrated footage.</p>
             </div>
           </div>
 
@@ -204,7 +205,7 @@ export default function CaseDetailPage() {
 
           {!canUpload && (
             <div className="alert alert-info mb-4">
-              <span>ℹ</span>
+              <span>i </span>
               Maximum 3 clips per case. Remove a clip to add another.
             </div>
           )}
@@ -293,7 +294,7 @@ export default function CaseDetailPage() {
                           </td>
                           <td>
                             <Link className="btn btn-ghost btn-sm" href={`/cases/${id}/media/${m.id}/tracks`}>Tracks</Link>
-                            <Link className="btn btn-ghost btn-sm" href={`/cases/${id}/media/${m.id}/calibration`}>Calibrate</Link>
+                            <Link className="btn btn-ghost btn-sm" href={`/cases/${id}/media/${m.id}/calibration`}>Optional scale setup</Link>
                             <Link className="btn btn-ghost btn-sm" href={`/cases/${id}/media/${m.id}/dynamics`}>Dynamics</Link>
                             <Link className="btn btn-ghost btn-sm" href={`/cases/${id}/media/${m.id}/scene3d`}>3D replay</Link>
                             <button className="btn btn-ghost btn-sm" onClick={() => mediaApi.downloadOriginal(id, m.id, m.original_filename)}>Download original</button>
@@ -316,7 +317,7 @@ export default function CaseDetailPage() {
 
           {media.length === 0 && uploads.length === 0 && (
             <div className="empty-state" style={{ padding: "var(--space-10) 0" }}>
-              <div className="empty-state-icon">🎬</div>
+              <div className="empty-state-icon">01</div>
               <h3>No clips yet</h3>
               <p>Upload 1–3 video clips to begin the investigation.</p>
             </div>
@@ -414,7 +415,7 @@ function SidebarShell({ caseId, kaseTitle }: { caseId: string; kaseTitle?: strin
       <nav className="sidebar-nav">
         <div className="sidebar-section-label">Workspace</div>
         <Link href="/cases" className="nav-item">
-          <span className="nav-item-icon">📁</span> Cases
+          <span className="nav-item-icon">▤</span> Cases
         </Link>
         <Link href="/cases/new" className="nav-item">
           <span className="nav-item-icon">＋</span> New Case
@@ -423,14 +424,14 @@ function SidebarShell({ caseId, kaseTitle }: { caseId: string; kaseTitle?: strin
           <>
             <div className="sidebar-section-label" style={{ marginTop: "var(--space-4)" }}>This Case</div>
             <Link href={`/cases/${caseId}`} className="nav-item active">
-              <span className="nav-item-icon">🔍</span>
+              <span className="nav-item-icon">◉</span>
               <span className="truncate" style={{ maxWidth: 160 }}>{kaseTitle}</span>
             </Link>
             <Link href={`/cases/${caseId}/transcripts`} className="nav-item">
-              <span className="nav-item-icon">💬</span> Transcripts
+              <span className="nav-item-icon">≡</span> Transcripts
             </Link>
             <Link href={`/cases/${caseId}/claims`} className="nav-item">
-              <span className="nav-item-icon">⚖️</span> Claims
+              <span className="nav-item-icon">◈</span> Claims
             </Link>
             <Link href={`/cases/${caseId}/phase5`} className="nav-item">
               <span className="nav-item-icon">▧</span> Evidence &amp; exports

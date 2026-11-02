@@ -4,6 +4,7 @@ import os
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy import inspect, text
 
 from services.api.db.models import Base
 
@@ -21,6 +22,15 @@ AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+        def ensure_calibration_validation_column(sync_conn) -> None:
+            columns = {column["name"] for column in inspect(sync_conn).get_columns("homography_fits")}
+            if "validation_anchor_count" not in columns:
+                sync_conn.execute(text(
+                    "ALTER TABLE homography_fits ADD COLUMN validation_anchor_count INTEGER NOT NULL DEFAULT 0"
+                ))
+
+        await conn.run_sync(ensure_calibration_validation_column)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

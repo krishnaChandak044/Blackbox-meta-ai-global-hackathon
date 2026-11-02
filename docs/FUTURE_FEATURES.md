@@ -1,6 +1,6 @@
 # Blackbox — Feature candidates and research roadmap
 
-**Updated:** 31 October 2026
+**Updated:** 2 November 2026
 **Status:** Proposed features and experiments, not completed capabilities or a prediction of hackathon placement.
 
 Blackbox's central promise is a preserved, source-linked account of what video shows, what remains unknown, and what conditional simulations suggest. A feature belongs in the product only if it strengthens that promise. See `PRD.md` for current requirements; this file records additional ideas and how they should be treated.
@@ -14,6 +14,16 @@ Blackbox's central promise is a preserved, source-linked account of what video s
 | 3 | Evidence-need and answerability view | Shows what cannot be answered and which obtainable item would help | Already covered by Evidence Rescue Radar and Identifiability Map; strengthen UI |
 | 4 | Versioned frame annotation studio | Allows a reviewer to correct ground-contact points, road lines, and event labels with an audit trail | Extend track-correction workflow |
 | 5 | Uncertainty and visibility overlay | Makes weakly observed trajectories and blind spots obvious in 2D and 3D | Strengthen existing 3D/2D requirements |
+
+## Implementation status — 2 November 2026
+
+The first three reviewer-facing additions are now present in the application as the case **Synchronized review workspace**:
+
+- **Multi-camera source review:** up to three original clips share a timeline after a reviewer records an offset and stated uncertainty. Matching event timestamps can be used to calculate and check the offset. Each save is versioned with both source hashes. This is a reviewer estimate, not automatic synchronization or a measured accuracy result.
+- **Acoustic/visual cross-check:** an FFmpeg/NumPy windowed-RMS scan lists candidate audio transients, linked to the original media hash. It does not classify a transient as a horn, collision, or braking sound. Candidates can be opened on the review timeline and compared with source-frame annotations.
+- **Versioned frame annotations:** reviewers can freeze a source frame, optionally mark a normalized image point, and record events, signal state, road markings, ground-contact points, occlusion boundaries, visible road conditions, or notes. Corrections append a version with the original clip hash and prior-version link; source bytes remain unchanged.
+
+These are implementation claims only. Synchronization accuracy, transient precision/recall, and annotation usability still require evaluation on labelled staged footage before the feature claims can be promoted as validated performance.
 
 These are the best *product* additions. They do not guarantee a top-one-percent result. The demo must still prove that the system works on fresh footage and reports measured errors.
 

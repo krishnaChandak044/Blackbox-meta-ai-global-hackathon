@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import asyncio
+import math
 import uuid
 from dataclasses import asdict
 from datetime import datetime
@@ -14,6 +15,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from engine.rival.hypothesis_search import search_rivals
+from engine.geometry.homography import (
+    MIN_ANCHORS,
+    MAX_ACCEPTABLE_CONDITION_NUMBER,
+    MAX_ACCEPTABLE_REPROJECTION_RMSE_PX,
+    homography_fit_is_usable,
+)
 from services.api.auth.session import current_user
 from services.api.db.models import DynamicsRun, HomographyFit, ObjectTrack, RivalSearch, TrackPointRow
 from services.api.db.session import get_db
@@ -91,6 +98,19 @@ async def run_rival_search(
     fit = await db.get(HomographyFit, primary.calibration_fit_id)
     if fit is None or fit.media_id != media_id or not fit.is_active:
         raise HTTPException(409, "Calibration changed after the primary run")
+    if (
+        fit.anchor_count < MIN_ANCHORS + 1
+        or fit.validation_anchor_count < 1
+        or not math.isfinite(fit.reprojection_rmse_px)
+        or fit.reprojection_rmse_px > MAX_ACCEPTABLE_REPROJECTION_RMSE_PX
+        or not math.isfinite(fit.condition_number)
+        or fit.condition_number > MAX_ACCEPTABLE_CONDITION_NUMBER
+        or fit.scale_metres_per_pixel is None
+        or fit.scale_relative_error is None
+        or not math.isfinite(fit.scale_relative_error)
+        or fit.scale_relative_error > 0.10
+    ):
+        raise HTTPException(409, "Calibration is not validated; physical rival analysis is unavailable")
     if media.sha256 != primary.media_sha256:
         raise HTTPException(409, "Media changed after the primary run")
     observations = [
@@ -165,6 +185,14 @@ async def get_latest_rivals(
     if _hash_track_points(points_result.scalars().all()) != primary.track_version_hash:
         raise HTTPException(409, "Rival search is stale because the source track changed")
     fit = await db.get(HomographyFit, primary.calibration_fit_id)
-    if fit is None or not fit.is_active:
+    if fit is None or not fit.is_active or not homography_fit_is_usable(
+        anchor_count=fit.anchor_count,
+        validation_anchor_count=fit.validation_anchor_count,
+        reprojection_rmse_px=fit.reprojection_rmse_px,
+        condition_number=fit.condition_number,
+        scale_metres_per_pixel=fit.scale_metres_per_pixel,
+        scale_relative_error=fit.scale_relative_error,
+        require_metric_scale=True,
+    ):
         raise HTTPException(409, "Rival search is stale because its calibration is no longer active")
     return _to_response(row)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import uuid
 from dataclasses import asdict
 from datetime import datetime
@@ -13,6 +14,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from engine.counterfactual.simulator import compute_sensitivity, run_counterfactual
+from engine.geometry.homography import (
+    MIN_ANCHORS,
+    MAX_ACCEPTABLE_CONDITION_NUMBER,
+    MAX_ACCEPTABLE_REPROJECTION_RMSE_PX,
+)
 from engine.dynamics.models import CounterfactualIntervention
 from engine.dynamics.serialization import dynamics_result_from_storage
 from services.api.auth.session import current_user
@@ -66,6 +72,19 @@ async def simulate(
             or _hash_track_points(current_points) != baseline.track_version_hash
             or media.sha256 != baseline.media_sha256):
         raise HTTPException(409, "Baseline inputs changed; queue a fresh dynamics run before simulating")
+    if (
+        fit.anchor_count < MIN_ANCHORS + 1
+        or fit.validation_anchor_count < 1
+        or not math.isfinite(fit.reprojection_rmse_px)
+        or fit.reprojection_rmse_px > MAX_ACCEPTABLE_REPROJECTION_RMSE_PX
+        or not math.isfinite(fit.condition_number)
+        or fit.condition_number > MAX_ACCEPTABLE_CONDITION_NUMBER
+        or fit.scale_metres_per_pixel is None
+        or fit.scale_relative_error is None
+        or not math.isfinite(fit.scale_relative_error)
+        or fit.scale_relative_error > 0.10
+    ):
+        raise HTTPException(409, "Calibration is not validated; physical counterfactual measurements are unavailable")
     try:
         engine_baseline = dynamics_result_from_storage(baseline)
         intervention = CounterfactualIntervention(

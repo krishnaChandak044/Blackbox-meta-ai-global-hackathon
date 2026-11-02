@@ -13,6 +13,7 @@ GET    /cases/{case_id}/media/{media_id}/calibration/fit           — get activ
 from __future__ import annotations
 
 import json
+import math
 import uuid
 from datetime import datetime
 
@@ -22,9 +23,13 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from engine.geometry.homography import (
+    MIN_ANCHORS,
     PixelPoint,
     WorldPoint,
+    MAX_ACCEPTABLE_CONDITION_NUMBER,
+    MAX_ACCEPTABLE_REPROJECTION_RMSE_PX,
     estimate_homography,
+    homography_fit_is_usable,
     reprojection_errors_px,
 )
 from engine.geometry.scale import ScaleUnavailable, derive_scale
@@ -87,6 +92,7 @@ class HomographyFitResponse(BaseModel):
     fitted_at: datetime
     is_active: bool
     per_anchor_errors_px: list[float] = []
+    validation_anchor_count: int = 0
 
     class Config:
         from_attributes = True
@@ -135,7 +141,12 @@ async def add_anchor(
     db: AsyncSession = Depends(get_db),
     user: str = Depends(current_user),
 ) -> AnchorResponse:
-    await _get_media_or_404(case_id, media_id, db)
+    media = await _get_media_or_404(case_id, media_id, db)
+    numeric_values = (payload.pixel_x, payload.pixel_y, payload.world_x, payload.world_y)
+    if not all(math.isfinite(value) for value in numeric_values):
+        raise HTTPException(status_code=422, detail="Anchor coordinates must be finite numbers")
+    if media.width and payload.pixel_x > media.width or media.height and payload.pixel_y > media.height:
+        raise HTTPException(status_code=422, detail="Selected image point is outside the source video frame")
 
     anchor = CalibrationAnchor(
         id=str(uuid.uuid4()),
@@ -210,9 +221,9 @@ async def fit_homography(
     """
     Fit a homography from all stored anchors for this media clip.
 
-    Requires ≥ 4 anchors.  Per-anchor reprojection errors are stored back
-    into the CalibrationAnchor rows.  If the anchors include a validated
-    reference distance pair, scale is derived and stored.
+    Requires four fit points plus at least one independently measured validation
+    point. Per-anchor reprojection errors are stored back into the CalibrationAnchor
+    rows. If the anchors include a validated reference distance pair, scale is derived.
 
     The previous active fit is marked is_active=False.
     """
@@ -225,11 +236,12 @@ async def fit_homography(
     )
     anchors = list(anchors_result.scalars().all())
 
-    if len(anchors) < 4:
+    minimum_points = MIN_ANCHORS + 1  # one independent point is reserved for validation
+    if len(anchors) < minimum_points:
         raise HTTPException(
             status_code=422,
-            detail=f"At least 4 anchors are required to fit a homography; "
-            f"currently {len(anchors)} anchor(s) placed.",
+            detail=f"At least {minimum_points} measured points are required: four to fit and one independent point to validate; "
+            f"currently {len(anchors)} point(s) placed.",
         )
 
     if (
@@ -244,16 +256,51 @@ async def fit_homography(
             status_code=422, detail="Choose two distinct distance reference anchors"
         )
 
-    pixel_pts = [PixelPoint(x=a.pixel_x, y=a.pixel_y) for a in anchors]
-    world_pts = [WorldPoint(x=a.world_x, y=a.world_y) for a in anchors]
+    # The first four spread-out points define the transformation. Later points
+    # are held out and independently validate the real-world coordinate mapping.
+    fit_anchors = anchors[:MIN_ANCHORS]
+    validation_anchors = anchors[MIN_ANCHORS:]
+    fit_pixel_pts = [PixelPoint(x=a.pixel_x, y=a.pixel_y) for a in fit_anchors]
+    fit_world_pts = [WorldPoint(x=a.world_x, y=a.world_y) for a in fit_anchors]
+    all_pixel_pts = [PixelPoint(x=a.pixel_x, y=a.pixel_y) for a in anchors]
+    all_world_pts = [WorldPoint(x=a.world_x, y=a.world_y) for a in anchors]
 
     try:
-        hom = estimate_homography(pixel_pts, world_pts)
+        hom = estimate_homography(fit_pixel_pts, fit_world_pts)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    # Never make an unstable numerical fit active. Anchor residual is only an
+    # internal consistency check (not independent proof of real-world accuracy).
+    validation_errors = []
+    try:
+        for anchor in validation_anchors:
+            predicted = hom.world_to_pixel(WorldPoint(x=anchor.world_x, y=anchor.world_y))
+            validation_errors.append(math.hypot(predicted.x - anchor.pixel_x, predicted.y - anchor.pixel_y))
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail="calibration_quality_rejected: validation points could not be projected") from exc
+    validation_rmse = math.sqrt(sum(error * error for error in validation_errors) / len(validation_errors))
+    if not math.isfinite(validation_rmse) or validation_rmse > MAX_ACCEPTABLE_REPROJECTION_RMSE_PX:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"calibration_quality_rejected: independent validation error is {validation_rmse:.2f} px; "
+                f"maximum allowed is {MAX_ACCEPTABLE_REPROJECTION_RMSE_PX:.1f} px. "
+                "Check the measured coordinates and click the same physical road points in the video."
+            ),
+        )
+    if not math.isfinite(hom.condition_number) or hom.condition_number > MAX_ACCEPTABLE_CONDITION_NUMBER:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"calibration_quality_rejected: point geometry is unstable (condition number "
+                f"{hom.condition_number:.1f}; maximum {MAX_ACCEPTABLE_CONDITION_NUMBER:.0f}). "
+                "Choose points spread across the road, not clustered or nearly in a line."
+            ),
+        )
+
     # Per-anchor errors
-    per_errors = reprojection_errors_px(hom, pixel_pts, world_pts)
+    per_errors = reprojection_errors_px(hom, all_pixel_pts, all_world_pts)
     for anchor, err in zip(anchors, per_errors):
         anchor.reprojection_error_px = err
 
@@ -288,8 +335,9 @@ async def fit_homography(
         id=str(uuid.uuid4()),
         media_id=media_id,
         case_id=case_id,
-        anchor_count=hom.anchor_count,
-        reprojection_rmse_px=hom.reprojection_rmse_px,
+        anchor_count=len(anchors),
+        validation_anchor_count=len(validation_anchors),
+        reprojection_rmse_px=validation_rmse,
         condition_number=hom.condition_number,
         scale_metres_per_pixel=scale_mpp,
         scale_relative_error=scale_err,
@@ -315,6 +363,7 @@ async def fit_homography(
         fitted_at=fit_row.fitted_at,
         is_active=fit_row.is_active,
         per_anchor_errors_px=per_errors,
+        validation_anchor_count=len(validation_anchors),
     )
 
 
@@ -335,6 +384,14 @@ async def get_active_fit(
     row = result.scalar_one_or_none()
     if not row:
         return None
+    # Hide legacy or manually-created fits that predate the quality gate.
+    if not homography_fit_is_usable(
+        anchor_count=row.anchor_count,
+        validation_anchor_count=row.validation_anchor_count,
+        reprojection_rmse_px=row.reprojection_rmse_px,
+        condition_number=row.condition_number,
+    ):
+        return None
     return HomographyFitResponse(
         id=row.id,
         media_id=row.media_id,
@@ -347,4 +404,5 @@ async def get_active_fit(
         H=json.loads(row.H_json),
         fitted_at=row.fitted_at,
         is_active=row.is_active,
+        validation_anchor_count=row.validation_anchor_count,
     )

@@ -22,9 +22,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from engine.geometry.homography import homography_fit_is_usable
 
 from services.api.auth.session import current_user
 from services.api.db.models import (
+    HomographyFit,
     JobStage,
     JobStatus,
     ObjectTrack,
@@ -161,9 +163,43 @@ async def get_track(
     )
     pts = pts_result.scalars().all()
 
+    # Never expose stored metre coordinates from a rejected/legacy fit as if
+    # they were trustworthy physical measurements. Pixel tracks remain usable.
+    fit_result = await db.execute(
+        select(HomographyFit).where(
+            HomographyFit.media_id == media_id, HomographyFit.is_active.is_(True)
+        ).order_by(HomographyFit.fitted_at.desc()).limit(1)
+    )
+    fit = fit_result.scalar_one_or_none()
+    physical_coordinates_valid = bool(fit and homography_fit_is_usable(
+        anchor_count=fit.anchor_count,
+        validation_anchor_count=fit.validation_anchor_count,
+        reprojection_rmse_px=fit.reprojection_rmse_px,
+        condition_number=fit.condition_number,
+        scale_metres_per_pixel=fit.scale_metres_per_pixel,
+        scale_relative_error=fit.scale_relative_error,
+        require_metric_scale=True,
+    ))
+
     summary = TrackSummary.model_validate(track)
     return TrackDetail(
-        **summary.model_dump(), points=[TrackPointOut.model_validate(p) for p in pts]
+        **summary.model_dump(),
+        points=[TrackPointOut.model_validate(p) if physical_coordinates_valid else TrackPointOut(
+            frame_index=p.frame_index,
+            presentation_ts_s=p.presentation_ts_s,
+            bbox_x_min=p.bbox_x_min,
+            bbox_y_min=p.bbox_y_min,
+            bbox_x_max=p.bbox_x_max,
+            bbox_y_max=p.bbox_y_max,
+            gc_pixel_x=p.gc_pixel_x,
+            gc_pixel_y=p.gc_pixel_y,
+            world_x=None,
+            world_y=None,
+            sigma_m=None,
+            detection_confidence=p.detection_confidence,
+            is_interpolated=p.is_interpolated,
+            is_human_corrected=p.is_human_corrected,
+        ) for p in pts]
     )
 
 

@@ -244,6 +244,7 @@ export interface HomographyFit {
   fitted_at: string;
   is_active: boolean;
   per_anchor_errors_px: number[];
+  validation_anchor_count?: number;
 }
 
 export interface TrackPointOut {
@@ -561,6 +562,36 @@ export interface CaseExport {
   completed_at: string | null;
 }
 
+export interface ReviewMedia {
+  id: string; filename: string; sha256: string; duration_seconds: number | null;
+  width: number | null; height: number | null; fps_nominal: number | null;
+  frame_count: number | null; is_variable_framerate: boolean | null; has_audio: boolean | null; stream_url: string;
+  sync: {
+    media_id: string; reference_media_id: string; offset_seconds: number;
+    uncertainty_seconds: number; alignment_basis: string; source_anchor_seconds: number | null;
+    reference_anchor_seconds: number | null; source_sha256: string; reference_sha256: string;
+    version: number; saved_at: string; saved_by: string;
+  } | null;
+}
+export interface FrameAnnotation {
+  annotation_key: string; version: number; previous_version: string | null; version_id: string;
+  media_id: string; source_sha256: string; kind: string; label: string; note: string;
+  timestamp_seconds: number; frame_index: number; x_normalized: number | null;
+  y_normalized: number | null; frame_index_basis: string; created_at: string; created_by: string;
+}
+export interface AcousticCandidate {
+  timestamp_seconds: number; duration_seconds: number; relative_level: number; rms: number;
+  label: string; classification: string;
+}
+export interface AcousticAnalysis {
+  analysis_id: string; media_id: string; source_sha256: string; events: AcousticCandidate[];
+  method: Record<string, string | number>; created_at: string; limitation: string;
+}
+export interface ReviewWorkspace {
+  case_id: string; media: ReviewMedia[]; annotations: FrameAnnotation[];
+  acoustic_analyses: AcousticAnalysis[]; sync_semantics: string;
+}
+
 export const phase5Api = {
   scene: (caseId: string, mediaId: string) =>
     req<Scene3D>(`/cases/${caseId}/media/${mediaId}/scene3d`),
@@ -620,5 +651,25 @@ export const phase5Api = {
     anchor.remove();
     window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
   },
+};
+
+export const reviewWorkspaceApi = {
+  get: (caseId: string) => req<ReviewWorkspace>(`/cases/${caseId}/review-workspace`),
+  saveSync: (caseId: string, mediaId: string, body: {
+    reference_media_id: string; offset_seconds: number; uncertainty_seconds: number;
+    alignment_basis: string; source_anchor_seconds?: number | null; reference_anchor_seconds?: number | null;
+  }) => req<ReviewMedia["sync"]>(`/cases/${caseId}/review-workspace/media/${mediaId}/sync`, {
+    method: "PUT", body: JSON.stringify(body),
+  }),
+  addAnnotation: (caseId: string, body: {
+    annotation_key?: string | null; media_id: string;
+    kind: "event" | "signal_state" | "stop_line" | "ground_contact" | "occlusion_boundary" | "road_condition" | "note";
+    label: string; note: string; timestamp_seconds: number; frame_index: number;
+    x_normalized?: number | null; y_normalized?: number | null;
+  }) => req<FrameAnnotation>(`/cases/${caseId}/review-workspace/annotations`, {
+    method: "POST", body: JSON.stringify(body),
+  }),
+  analyzeAudio: (caseId: string, mediaId: string) =>
+    req<AcousticAnalysis>(`/cases/${caseId}/review-workspace/media/${mediaId}/acoustic-candidates`, { method: "POST" }),
 };
 

@@ -128,6 +128,41 @@ def _build_dlt_matrix(
 
 
 MIN_ANCHORS = 4
+MAX_ACCEPTABLE_REPROJECTION_RMSE_PX = 5.0
+MAX_ACCEPTABLE_CONDITION_NUMBER = 1_000.0
+
+
+def homography_fit_is_usable(
+    *,
+    anchor_count: int,
+    validation_anchor_count: int | None,
+    reprojection_rmse_px: float | None,
+    condition_number: float | None,
+    scale_metres_per_pixel: float | None = None,
+    scale_relative_error: float | None = None,
+    require_metric_scale: bool = False,
+) -> bool:
+    """Shared gate for exposing physical measurements from a stored fit."""
+    if anchor_count < MIN_ANCHORS + 1 or validation_anchor_count is None or validation_anchor_count < 1:
+        return False
+    if (
+        reprojection_rmse_px is None
+        or not math.isfinite(reprojection_rmse_px)
+        or reprojection_rmse_px > MAX_ACCEPTABLE_REPROJECTION_RMSE_PX
+        or condition_number is None
+        or not math.isfinite(condition_number)
+        or condition_number > MAX_ACCEPTABLE_CONDITION_NUMBER
+    ):
+        return False
+    if require_metric_scale and (
+        scale_metres_per_pixel is None
+        or not math.isfinite(scale_metres_per_pixel)
+        or scale_relative_error is None
+        or not math.isfinite(scale_relative_error)
+        or scale_relative_error > 0.10
+    ):
+        return False
+    return True
 
 
 def estimate_homography(
