@@ -96,7 +96,7 @@ export default function AtlasPanel({ caseId }: { caseId: string }) {
     <section aria-labelledby="atlas-heading">
       <div className="mb-4">
         <p className="eyebrow">Opt-in, aggregate, private</p>
-        <h2 id="atlas-heading">Prevention Atlas</h2>
+        <h2 id="atlas-heading">Shared road-safety patterns</h2>
         <p className="text-sm text-secondary mt-2">Only reviewed derived counts and metrics can be contributed. No media, names, exact coordinates, or narratives are sent to this view.</p>
       </div>
       {error && <div className="alert alert-error mb-4" role="alert">{error}</div>}

@@ -157,15 +157,15 @@ export default function ReviewWorkspacePage() {
   for (const item of annotations) versions.set(item.annotation_key, [...(versions.get(item.annotation_key) ?? []), item]);
 
   return <main className="page-content review-workspace fade-in">
-    <div className="phase5-nav"><Link href={`/cases/${caseId}`}>← Back to case</Link><Link href={`/cases/${caseId}/phase5`}>Evidence &amp; exports →</Link></div>
-    <header className="page-header"><p className="eyebrow">Evidence review · Original clips</p><h1>Synchronized review workspace</h1>
-      <p>Compare up to three source clips, inspect audio transient candidates, and add versioned notes to exact frames. Time offsets are reviewer estimates and retain their uncertainty.</p>
+    <div className="phase5-nav"><Link href={`/cases/${caseId}`}>← Back to case</Link><Link href={`/cases/${caseId}/reports`}>Evidence &amp; reports →</Link></div>
+    <header className="page-header"><p className="eyebrow">Evidence review · Original clips</p><h1>Review your footage</h1>
+      <p>Compare clips, note what is visible, and keep every observation linked to its source. Time alignment is an estimate you can review and correct.</p>
     </header>
     {error && <div className="alert alert-error" role="alert">{error}<button className="btn btn-ghost btn-sm" onClick={() => setError("")}>Dismiss</button></div>}
     {!workspace.media.length && <div className="card card-body">Upload a clip to this case before opening the review workspace.</div>}
     {workspace.media.length > 0 && <>
       <section className="card card-body review-sync-section">
-        <div className="review-section-title"><div><p className="eyebrow">Feature 1 · Multi-camera review</p><h2>Review the clips on one timeline</h2>
+        <div className="review-section-title"><div><p className="eyebrow">Compare clips</p><h2>Review the clips on one timeline</h2>
           <p>{workspace.sync_semantics}. Set an offset only when you can identify a matching event in both clips.</p></div>
           <div className="review-common-time">Shared time <strong>{commonTime.toFixed(2)} s</strong></div></div>
         <label className="review-timebar">Shared review time <input type="range" min="0" max={Math.max(0.1, duration)} step="0.01" value={Math.min(commonTime, Math.max(0.1, duration))} onChange={(event) => seekAll(Number(event.target.value))} /><span>{Math.min(commonTime, duration).toFixed(2)} / {duration.toFixed(2)} s</span></label>

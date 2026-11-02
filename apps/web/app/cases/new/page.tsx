@@ -344,7 +344,7 @@ function Sidebar() {
           <span className="nav-item-icon">＋</span> New Case
         </Link>
       </nav>
-      <div className="sidebar-footer">Phase 1 · Evidence Foundation</div>
+      <div className="sidebar-footer">Private evidence workspace</div>
     </aside>
   );
 }

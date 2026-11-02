@@ -6,15 +6,15 @@ import RadarPanel from "@/components/evidence-rescue/RadarPanel";
 import AtlasPanel from "@/components/atlas/AtlasPanel";
 import ExportPanel from "@/components/exports/ExportPanel";
 
-export default function Phase5Page() {
+export default function ReportsPage() {
   const { id } = useParams<{ id: string }>();
   return (
     <main className="page-content phase5-page fade-in">
-      <div className="phase5-nav"><Link href={`/cases/${id}`}>← Back to case</Link><span>Phase 5 · Review tools</span></div>
+      <div className="phase5-nav"><Link href={`/cases/${id}`}>← Back to case</Link><span>Case review</span></div>
       <header className="page-header">
         <p className="eyebrow">Case review</p>
-        <h1>Evidence collection &amp; reporting</h1>
-        <p>Inspect what is missing, review consented aggregate patterns, and create a traceable export.</p>
+        <h1>Evidence &amp; reports</h1>
+        <p>Keep track of useful follow-up evidence, review optional privacy-protected summaries, and create a traceable case package.</p>
       </header>
       <div className="phase5-sections">
         <div className="card card-body"><RadarPanel caseId={id} /></div>

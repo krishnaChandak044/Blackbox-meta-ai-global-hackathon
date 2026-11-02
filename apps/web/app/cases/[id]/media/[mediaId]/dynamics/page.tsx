@@ -59,7 +59,7 @@ export default function DynamicsPage({ params }: { params: { id: string; mediaId
   try { points = result?.fitted_points_json ? JSON.parse(result.fitted_points_json) : []; } catch { /* malformed stored output is omitted */ }
 
   return <main className="page-content fade-in" style={{ maxWidth: 1100, margin: "0 auto" }}>
-    <div className="page-header"><p><Link href={`/cases/${caseId}`}>Case</Link> / Media / Phase 4</p><h1>Dynamics report</h1><p>Track-only fit. This is an analysis under declared assumptions, not a legal fault finding.</p></div>
+    <div className="page-header"><p><Link href={`/cases/${caseId}`}>Case</Link> / Footage / Advanced analysis</p><h1>Motion analysis</h1><p>Optional analysis based only on reviewer-confirmed tracks and declared assumptions. It does not determine legal fault.</p></div>
     {error && <div className="alert alert-error">{error}</div>}
     <section className="card card-body" style={{ marginBottom: 20 }}>
       <h2 className="heading-sm">Physical motion analysis</h2>
