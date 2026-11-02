@@ -1,174 +1,62 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { casesApi, relativeTime, type Case } from "@/lib/api";
 
-const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
-  draft:      { label: "Draft",      cls: "badge-neutral" },
-  processing: { label: "Processing", cls: "badge-sky" },
-  ready:      { label: "Ready",      cls: "badge-sage" },
-  exported:   { label: "Exported",   cls: "badge-sand" },
-};
+const STATUS: Record<string, string> = { draft: "Draft", processing: "Processing", ready: "Ready", exported: "Exported" };
 
 export default function CasesPage() {
-  const [cases, setCases]   = useState<Case[]>([]);
+  const [cases, setCases] = useState<Case[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError]   = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
+  const load = () => {
+    setLoading(true); setError("");
+    casesApi.list().then(setCases).catch((e: Error) => setError(e.message)).finally(() => setLoading(false));
+  };
+  useEffect(() => { load(); }, []);
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return cases.filter((item) => !q || [item.title, item.description, item.incident_location, item.jurisdiction].some((v) => v?.toLowerCase().includes(q)));
+  }, [cases, query]);
 
-  useEffect(() => {
-    casesApi.list()
-      .then(setCases)
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, []);
-
-  return (
-    <div className="main-with-sidebar">
-      <Sidebar active="cases" />
-
-      <div className="page-content fade-in">
-        <div className="page-header flex items-center justify-between">
-          <div>
-            <h1>Cases</h1>
-            <p>Each case is an independent investigation. Originals are preserved on creation.</p>
-          </div>
-          <Link href="/cases/new" className="btn btn-primary">
-            + New Case
-          </Link>
-        </div>
-
-        {loading && (
-          <div className="flex items-center gap-3" style={{ color: "var(--slate-500)", padding: "var(--space-8) 0" }}>
-            <div className="spinner" />
-            Loading cases…
-          </div>
-        )}
-
-        {error && (
-          <div className="alert alert-error">
-            <span>⚠</span> {error}
-          </div>
-        )}
-
-        {!loading && !error && cases.length === 0 && (
-          <div className="empty-state">
-            <div className="empty-state-icon">📁</div>
-            <h3>No cases yet</h3>
-            <p>Create your first case to start preserving and analysing incident footage.</p>
-            <Link href="/cases/new" className="btn btn-primary">Open a Case</Link>
-          </div>
-        )}
-
-        {!loading && cases.length > 0 && (
-          <>
-            <div className="stat-grid mb-6">
-              <StatCard label="Total Cases"    value={cases.length} sub="all time" />
-              <StatCard label="Ready"          value={cases.filter(c => c.status === "ready").length}      sub="analysis complete" />
-              <StatCard label="Processing"     value={cases.filter(c => c.status === "processing").length} sub="in pipeline" />
-              <StatCard label="Total Clips"    value={cases.reduce((a, c) => a + c.media_count, 0)}        sub="source media files" />
-            </div>
-
-            <div className="card">
-              <div className="card-header">
-                <span style={{ color: "var(--slate-500)", fontSize: "var(--text-sm)" }}>
-                  {cases.length} case{cases.length !== 1 ? "s" : ""}
-                </span>
-              </div>
-              <div className="table-container" style={{ borderRadius: 0, border: "none", boxShadow: "none" }}>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Title</th>
-                      <th>Status</th>
-                      <th>Clips</th>
-                      <th>Location</th>
-                      <th>Created</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cases.map((c) => {
-                      const badge = STATUS_BADGE[c.status] ?? { label: c.status, cls: "badge-neutral" };
-                      return (
-                        <tr key={c.id}>
-                          <td>
-                            <Link href={`/cases/${c.id}`} style={{ fontWeight: 500, color: "var(--slate-900)" }}>
-                              {c.title}
-                            </Link>
-                            {c.description && (
-                              <div className="text-xs text-secondary truncate" style={{ maxWidth: 260, marginTop: 2 }}>
-                                {c.description}
-                              </div>
-                            )}
-                          </td>
-                          <td><span className={`badge ${badge.cls}`}>{badge.label}</span></td>
-                          <td>
-                            <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-sm)" }}>
-                              {c.media_count} / 3
-                            </span>
-                          </td>
-                          <td className="text-sm text-secondary">{c.incident_location ?? "—"}</td>
-                          <td className="text-sm text-secondary">{relativeTime(c.created_at)}</td>
-                          <td>
-                            <Link href={`/cases/${c.id}`} className="btn btn-secondary btn-sm">
-                              Open →
-                            </Link>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function StatCard({ label, value, sub }: { label: string; value: number; sub: string }) {
-  return (
-    <div className="stat-card">
-      <div className="stat-label">{label}</div>
-      <div className="stat-value">{value}</div>
-      <div className="stat-sub">{sub}</div>
-    </div>
-  );
-}
-
-function Sidebar({ active }: { active: string }) {
-  const nav = [
-    { href: "/cases",    icon: "📁", label: "Cases" },
-    { href: "/cases/new", icon: "＋", label: "New Case" },
-  ];
-  return (
+  return <div className="main-with-sidebar">
     <aside className="sidebar">
-      <div className="sidebar-logo">
-        <div className="sidebar-logo-mark">
-          <div className="sidebar-logo-box">BB</div>
-          <div>
-            <div className="sidebar-logo-name">Blackbox</div>
-            <div className="sidebar-logo-sub">Evidence workspace</div>
-          </div>
-        </div>
-      </div>
-      <nav className="sidebar-nav">
+      <Link href="/" className="sidebar-logo brand-lockup"><span className="brand-mark">B</span><span><strong>Blackbox</strong><small>Evidence workspace</small></span></Link>
+      <nav className="sidebar-nav" aria-label="Workspace">
         <div className="sidebar-section-label">Workspace</div>
-        {nav.map((n) => (
-          <Link
-            key={n.href}
-            href={n.href}
-            className={`nav-item ${active === n.label.toLowerCase().replace(" ", "-") ? "active" : ""}`}
-          >
-            <span className="nav-item-icon">{n.icon}</span>
-            {n.label}
-          </Link>
-        ))}
+        <Link href="/cases" className="nav-item active"><span className="nav-glyph">▤</span>Cases</Link>
+        <Link href="/cases/new" className="nav-item"><span className="nav-glyph">＋</span>New case</Link>
       </nav>
-      <div className="sidebar-footer">Phase 1 · Evidence Foundation</div>
+      <div className="sidebar-footer"><span className="status-dot" /> Evidence review workspace</div>
     </aside>
-  );
+
+    <main className="page-content cases-page fade-in">
+      <header className="page-header cases-heading">
+        <div><p className="eyebrow">Workspace / Cases</p><h1>Your cases</h1><p>Open an investigation or continue reviewing a saved case.</p></div>
+        <Link href="/cases/new" className="btn btn-primary">＋ <span>New case</span></Link>
+      </header>
+
+      <section className="case-list-panel" aria-label="Case list">
+        <div className="case-list-toolbar">
+          <div><h2>All cases</h2><p>{loading ? "Loading your workspace…" : `${cases.length} ${cases.length === 1 ? "case" : "cases"}`}</p></div>
+          {!loading && cases.length > 0 && <label className="case-search"><span aria-hidden="true">⌕</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by title or location" aria-label="Search cases" /></label>}
+        </div>
+        {error && <div className="case-error" role="alert"><div><strong>Cases couldn’t load.</strong><span>{error}</span></div><button className="btn btn-secondary btn-sm" onClick={load}>Try again</button></div>}
+        {loading && <div className="case-loading"><span className="spinner" /> Connecting to your workspace…</div>}
+        {!loading && !error && cases.length === 0 && <div className="case-empty"><span className="empty-mark">B</span><h3>No cases yet</h3><p>Create a case to preserve source footage and begin a structured review. You can add video after the case is created.</p><Link href="/cases/new" className="btn btn-primary">Open your first case <span aria-hidden="true">→</span></Link></div>}
+        {!loading && !error && cases.length > 0 && visible.length === 0 && <div className="case-empty compact"><h3>No matching cases</h3><p>Try another title, location, or jurisdiction.</p><button className="btn btn-secondary" onClick={() => setQuery("")}>Clear search</button></div>}
+        {!loading && !error && visible.length > 0 && <div className="case-table-wrap"><table className="case-table"><thead><tr><th>Case</th><th>Status</th><th>Source clips</th><th>Location</th><th>Updated</th><th><span className="sr-only">Open case</span></th></tr></thead><tbody>{visible.map((item) => <tr key={item.id}>
+          <td><Link className="case-title" href={`/cases/${item.id}`}>{item.title}</Link>{item.description && <span className="case-description">{item.description}</span>}</td>
+          <td><span className={`case-status status-${item.status}`}>{STATUS[item.status] ?? item.status}</span></td>
+          <td><span className="clip-count">{item.media_count}<span> / 3</span></span></td>
+          <td className="case-muted">{item.incident_location || "Not added"}</td>
+          <td className="case-muted">{relativeTime(item.created_at)}</td>
+          <td><Link className="case-open-link" href={`/cases/${item.id}`} aria-label={`Open ${item.title}`}>Open <span aria-hidden="true">→</span></Link></td>
+        </tr>)}</tbody></table></div>}
+      </section>
+      <p className="workspace-footnote"><span className="status-dot" /> Original media integrity and processing history are recorded per case.</p>
+    </main>
+  </div>;
 }

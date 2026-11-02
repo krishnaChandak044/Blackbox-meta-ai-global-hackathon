@@ -68,7 +68,7 @@ export default function NewCasePage() {
             ) : (
               <>
                 <div className="alert alert-error" role="alert" style={{ marginTop: "var(--space-4)" }}>
-                  <span>⚠</span> {accessError} Your case details haven’t been submitted.
+                  <span>! </span> {accessError} Your case details haven’t been submitted.
                 </div>
                 <button className="btn btn-primary" onClick={() => void checkAccess()}>
                   Retry connection
@@ -194,7 +194,7 @@ export default function NewCasePage() {
             {step === 1 && (
               <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
                 <div className="alert alert-info">
-                  <span>ℹ</span>
+                  <span>i </span>
                   <div>
                     <strong>Before you upload:</strong> Blackbox stores the original bytes of any
                     file you upload. It will compute a SHA-256 hash and log every
@@ -270,7 +270,7 @@ export default function NewCasePage() {
 
                 {error && (
                   <div className="alert alert-error">
-                    <span>⚠</span> {error}
+                    <span>! </span> {error}
                   </div>
                 )}
               </div>
@@ -338,7 +338,7 @@ function Sidebar() {
       <nav className="sidebar-nav">
         <div className="sidebar-section-label">Workspace</div>
         <Link href="/cases" className="nav-item">
-          <span className="nav-item-icon">📁</span> Cases
+          <span className="nav-item-icon">▤</span> Cases
         </Link>
         <Link href="/cases/new" className="nav-item active">
           <span className="nav-item-icon">＋</span> New Case

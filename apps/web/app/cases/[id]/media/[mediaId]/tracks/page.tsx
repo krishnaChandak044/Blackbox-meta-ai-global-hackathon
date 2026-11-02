@@ -231,7 +231,7 @@ export default function TracksPage({ params }: PageProps) {
 
         {running && (
           <div className="card" style={{ padding: "var(--space-4)", textAlign: "center" }}>
-            <div style={{ fontSize: 24, marginBottom: 8 }}>⏳</div>
+            <div style={{ fontSize: 11, marginBottom: 8, fontFamily: "var(--font-mono)" }}>WAIT</div>
             <p className="text-sm text-tertiary">Tracking in progress…</p>
           </div>
         )}

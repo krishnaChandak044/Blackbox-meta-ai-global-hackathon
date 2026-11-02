@@ -211,8 +211,9 @@ export default function ReviewWorkspacePage() {
         <div className="review-note"><strong>Interpretation:</strong> offsets are manual estimates. The displayed ± value is reviewer-entered uncertainty, not an independently measured error. Unaligned clips remain viewable individually.</div>
       </section>
 
-      <section className="card card-body review-acoustic-section">
-        <p className="eyebrow">Feature 2 · Audio and visual cross-check</p><h2>Candidate acoustic transients</h2>
+      <details className="card card-body review-disclosure review-acoustic-section">
+        <summary className="review-disclosure-summary"><span className="review-disclosure-index">02</span><span><strong>Review audio cues</strong><small>Optional screening for unusual sound energy in the original clip.</small></span><span className="review-disclosure-action">Open section <span aria-hidden="true">＋</span></span></summary>
+        <div className="review-disclosure-body"><h2>Candidate acoustic transients</h2>
         <p className="text-sm text-secondary">Blackbox flags unusually high short-window audio energy. It does not label a transient as a horn, impact, or braking sound. Open the corresponding moment in the source video/audio and add a reviewer annotation if useful.</p>
         <div className="review-audio-grid">{workspace.media.map((clip) => {
           const result = analysis[clip.id];
@@ -234,10 +235,12 @@ export default function ReviewWorkspacePage() {
               })}</ul><p className="review-note">{result.limitation}</p></>}
           </article>;
         })}</div>
-      </section>
+        </div>
+      </details>
 
-      <section className="card card-body review-annotation-section">
-        <p className="eyebrow">Feature 3 · Versioned frame annotations</p><h2>Record what a reviewer sees</h2>
+      <details className="card card-body review-disclosure review-annotation-section">
+        <summary className="review-disclosure-summary"><span className="review-disclosure-index">03</span><span><strong>Add a frame note</strong><small>Save an observation linked to a specific source moment.</small></span><span className="review-disclosure-action">Open section <span aria-hidden="true">＋</span></span></summary>
+        <div className="review-disclosure-body"><h2>Record what a reviewer sees</h2>
         <p className="text-sm text-secondary">Freeze a source frame, mark an optional image point, and save a source-linked note. Corrections append a new version; previous versions remain available for review and export. The source presentation timestamp is the primary locator; frame numbers use nominal FPS and are approximate for variable-frame-rate clips.</p>
         <div className="review-annotation-grid">
           <div className="review-annotation-editor">
@@ -269,7 +272,8 @@ export default function ReviewWorkspacePage() {
           </aside>
         </div>
         <p className="review-note">Annotations are reviewer observations, not system findings. The source video remains unchanged; each saved version records its source hash, clip time, frame index, actor, and predecessor.</p>
-      </section>
+        </div>
+      </details>
     </>}
   </main>;
 }
