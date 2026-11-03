@@ -1,182 +1,116 @@
-<div align="center">
+# Blackbox
 
-<img src="https://img.shields.io/badge/Meta%20AI%20Hackathon-2026-blue?style=for-the-badge&logo=meta" />
-<img src="https://img.shields.io/badge/Status-In%20Development-orange?style=for-the-badge" />
-<img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" />
+**Road-incident evidence, organized for human review.**
 
-# 🖤 Blackbox
+Blackbox is a hackathon-stage software prototype for preserving road-incident media and helping a reviewer inspect what the footage supports, what remains uncertain, and what additional evidence could help. It is designed around source traceability and explicit limits. It does not issue legal fault findings.
 
-### *From scattered clips to a reviewable incident — and from an incident to a testable prevention hypothesis.*
+> **Project status:** prototype, not a validated forensic product. Several analysis flows are conditional or experimental. A file hash records integrity from intake onward; it does not prove that footage was authentic before upload.
 
-**An AI-powered, evidence-first road crash investigation workspace.**  
-Built for the **Meta Global AI Developer Hackathon 2026**.
+## Product screenshots
 
-</div>
+**Blackbox home**
 
----
+![Blackbox home screen](docs/assets/blackbox-homepage.jpg)
 
-## 🚨 The Problem
+**Evidence-handling detail cropped from the home screen**
 
-Every year, **1.19 million people die on roads globally** (WHO, 2023). In India alone, **172,890 fatalities** were recorded in 2023.
+![Blackbox evidence handling principles](docs/assets/evidence-principles.jpg)
 
-Most incidents generate fragmented evidence — phone videos, shop CCTV, dashcams, and inconsistent witness accounts. A non-expert has **no practical way** to:
-- Preserve originals before they're deleted
-- Align multiple camera angles
-- Separate what was *observed* from what was *assumed*
-- Build a package that an expert or lawyer can actually review
+These screenshots are from the local application. They show the current product interface, not a claim that every analysis service has been validated end to end.
 
-Polished AI summaries make this worse by silently filling gaps with invented conclusions.
+## What the prototype contains
 
-**Blackbox fixes this.**
+The repository includes a Next.js web application, a FastAPI service, Celery workers, a deterministic Python engine, and product and evaluation documentation.
 
----
+| Capability | Current status |
+| --- | --- |
+| Case workspace, consent flow, and source-media intake | Interface and API paths are present; operation requires the web app, API, database, and worker services to be available. |
+| Source-file hashes and processing history | Backend implementation records media integrity and processing metadata. A hash documents the bytes received; it is not an authenticity certificate. |
+| Track review and ground-plane calibration | Prototype workflow. Tracking may use a local motion baseline or optional SAM 3.1 when configured and explicitly authorized. Calibration needs suitable points and measured distances for metric results. |
+| Voice transcription and claim review | A Muse Voice adapter and transcript/claim workflows are present. Live transcription depends on Meta API access and configuration; extracted claims require human review. |
+| Dynamics, counterfactuals, and rival hypotheses | Engine, API, worker, and UI paths are present. Outputs are conditional on reviewed tracks and calibration and are not validated forensic conclusions. |
+| 3D replay, evidence-rescue tools, prevention aggregation, and exports | Prototype surfaces and code paths exist. Treat generated scenes as illustrative and the analytical results as unvalidated until independently evaluated. |
 
-## 💡 What is Blackbox?
+The repository's product requirements describe the intended product in more detail than the current validated implementation. See [docs/PRD.md](docs/PRD.md), [docs/EVALUATION.md](docs/EVALUATION.md), and [docs/SAFETY_PRIVACY.md](docs/SAFETY_PRIVACY.md).
 
-Blackbox turns **1–3 video clips + witness testimony** into a fully auditable investigation package — the way aviation uses black box recordings to prevent future crashes, applied to road incidents.
+## Design principles
 
-> Upload video → get a verified, source-linked, expert-readable investigation report.
+- Preserve source media separately from derived files.
+- Keep observed, measured, assumed, simulated, and unknown information distinct.
+- Link review findings to source media and frame/time references wherever available.
+- Fit motion from track evidence; do not use a witness statement to train the result that checks that statement.
+- Withhold metric speed when scale or calibration is inadequate.
+- Label generated or simulated visualizations as illustrative.
+- When evidence does not support an answer, state that limitation instead of guessing.
+- Keep a qualified human reviewer in control.
 
----
+## Technology
 
-## 🎯 What You Get
+- **Web:** Next.js, React, TypeScript
+- **API:** FastAPI, Pydantic, SQLAlchemy
+- **Background work:** Celery and Redis
+- **Data:** PostgreSQL by default in Docker Compose; SQLite is available for local development
+- **Media and geometry:** FFmpeg/ffprobe, OpenCV, NumPy, SciPy
+- **Meta model adapters:** optional SAM 3.1 and Muse Voice integrations; they require valid credentials and user authorization before external media processing
+- **3D interface:** custom Canvas-rendered scene viewer; the current implementation is a prototype, not a Three.js / React Three Fiber scene
 
-| Output | Description |
-|--------|-------------|
-| 📦 **Media Inventory** | SHA-256 hashed originals with full lineage tracking |
-| ⏱️ **Event Timeline** | Frame-cited, synchronized sequence of events |
-| 📐 **Trajectory Reconstruction** | 2D top-down vehicle paths with calibration uncertainty |
-| ✅ **Claim Ledger** | Each witness statement marked: supported / contradicted / undeterminable |
-| 🔀 **What-If Simulator** | "What if braking started 0.5s earlier?" with sensitivity analysis |
-| 🌐 **3D Replay** | Orbitable, scrubable 3D scene — clearly labeled as illustrative |
-| 📄 **Review Package** | Exportable PDF + JSON report with full source lineage |
+The deterministic engine owns numerical outputs. A language model is not treated as the source of truth for physics or legal conclusions.
 
----
+## Run locally
 
-## 🧠 Core AI Stack
+### Requirements
 
-| Component | Role |
-|-----------|------|
-| **SAM 3.1** | Segment and track vehicles, pedestrians, road markings |
-| **Muse Voice Transcribe** | Convert multilingual speech to timestamped text |
-| **Muse Spark** | Extract atomic claims, verify against video evidence |
-| **SAM 3D Objects** | Generate illustrative vehicle geometry (optional) |
-| **Physics Engine** | Deterministic kinematics, uncertainty propagation, counterfactuals |
+- Docker Desktop with Docker Compose
+- Node.js 20 or newer
+- Python 3.11 or newer
+- `uv` for the Python setup target
 
----
-
-## 🔑 Key Principles
-
-1. **Preserve originals unchanged** — every derived artifact links back to source
-2. **Separate facts from assumptions** — observed / measured / assumed / simulated / unknown
-3. **Statements never influence the reconstruction that checks them**
-4. **A generated 3D view is illustrative, never source footage**
-5. **When evidence is insufficient → return `undeterminable`, not a guess**
-
----
-
-## 🗺️ Feature Highlights
-
-### 🔍 Evidence Rescue Radar
-Identifies missing evidence *before it disappears* — estimates which nearby cameras could have captured the incident, drafts a preservation request, and shows countdown timers per source.
-
-### 🗂️ Identifiability Map
-For every question, generates an *answerability certificate*: what data is needed, what's available, what's unknowable. Shows the difference between "uncertain" and "unanswerable."
-
-### ⚔️ Rival Hypothesis Workbench
-Searches for alternative explanations that also fit the observed footage. Adds a second camera → one hypothesis becomes inconsistent. Live visual drama, rigorous science.
-
-### 🛡️ Prevention Atlas
-Aggregates consented, anonymized cases at the same junction to identify recurring conflict patterns and test infrastructure interventions — turning individual reviews into road-safety insights.
-
----
-
-## 👥 Who Is It For?
-
-| User | Use Case |
-|------|----------|
-| 🧑 Accident victim | Preserve and organize evidence immediately |
-| ⚖️ Lawyer / Legal aid | Rapid triage — what's proven vs. disputed |
-| 🏦 Insurance reviewer | Factual sequence with full source citations |
-| 🔬 Collision expert | Editable calibration, reproducible computation |
-| 📰 Journalist | Investigate road design failures with data |
-| 🌍 Road safety NGO | Aggregated, privacy-protected junction analysis |
-
----
-
-## 🏗️ Build Order
-
-```
-1. Case schema → media storage → hashes → lineage
-2. Fixed-camera tracking → timestamp handling → source-frame viewer
-3. Calibration → 2D trajectory engine → refusal rules
-4. Voice transcription → atomic claim checking
-5. Dynamics inference → uncertainty propagation
-6. Counterfactual simulator → sensitivity view
-7. Synchronized 3D viewer
-8. Multi-camera alignment → export → privacy copies
-9. Evidence Rescue Radar → Identifiability Map → Rival Hypothesis → Prevention Atlas
-10. Evaluation → scorecard → live demo
-```
-
----
-
-## 🚀 Getting Started
-
-> Phase 1 requires a private access password and starts media probing after upload. See the commands below.
-
-Phase 2 adds a fixed-camera OpenCV motion baseline, human track confirmation,
-and anchor-based ground-plane calibration. Motion regions are labeled `unknown`;
-they are not SAM detections or verified vehicle identities. Use a stationary camera,
-review each track, and add a measured distance before using metric positions.
-The full reconstruction, counterfactual, and 3D pipeline remains planned work.
+### Setup
 
 ```bash
 git clone https://github.com/krishnaChandak044/Blackbox-meta-ai-global-hackathon.git
 cd Blackbox-meta-ai-global-hackathon
 cp .env.example .env
-# Set SECRET_KEY (32+ random characters) and BLACKBOX_ACCESS_PASSWORD in .env
-make setup
-make dev
-# Open http://localhost:3000/login
 ```
 
----
+Edit `.env` before starting. Set a private `BLACKBOX_ACCESS_PASSWORD` and a random `SECRET_KEY` of at least 32 characters. Keep real credentials out of Git. Meta model credentials are optional for local app startup; configure them only for the integrations you intend to use.
 
-## 📊 Quality Gates
+```bash
+make setup
+make dev
+```
 
-Before any feature is considered done, it must pass:
+Open the web app at [http://localhost:3000](http://localhost:3000). The API health endpoint is [http://localhost:8000/health](http://localhost:8000/health), and the interactive API documentation is [http://localhost:8000/api/docs](http://localhost:8000/api/docs). The API root `/` is not the web application and may return 404; use the web URL for the interface.
 
-- ✅ **Integrity gate** — originals remain byte-identical
-- ✅ **Grounding gate** — every claim cites a valid source frame
-- ✅ **Calibration gate** — speed withheld if scale is unknown
-- ✅ **Independence gate** — statements don't influence the reconstruction that checks them
-- ✅ **Uncertainty gate** — counterfactuals state their assumptions
-- ✅ **Visualization gate** — all synthetic 3D views are labeled
-- ✅ **Reproducibility gate** — same manifest + seed = same result
-- ✅ **Demo gate** — fresh upload works without hidden prerecorded output
+To stop the Docker Compose services, press `Ctrl+C` in the terminal running `make dev`, or run `docker compose down` in another terminal.
 
----
+## Meta API and media consent
 
-## ⚠️ What Blackbox Does NOT Do
+The `.env.example` file documents the available configuration variables. Do not commit `.env` or expose API keys in client-side code. Before a clip is sent to an external model service, obtain the required consent in the application. If Meta APIs are not configured or available, use the local tracking path where supported and explain the resulting limits.
 
-- ❌ Issue legal fault verdicts
-- ❌ Authenticate a video as genuine (flags anomalies; refers to experts)
-- ❌ Identify people from faces
-- ❌ Assert driver intent or impairment
-- ❌ Present generated camera angles as real footage
-- ❌ Claim a counterfactual *would* have prevented a crash
+## Repository map
 
----
+```text
+apps/web/                 Next.js application and review interface
+services/api/              FastAPI routes, authentication, schemas, database
+services/worker/           Celery jobs, media processing, model adapters
+engine/                     Geometry, tracking, claims, dynamics, simulation
+contracts/                  Data contracts and typed evidence structures
+evaluation/                 Evaluation fixtures and scorecard utilities
+fixtures/                   Staged and synthetic media fixtures
+docs/                       Product, architecture, safety, evaluation, and demo docs
+```
 
-## 📄 License
+## Evaluation and responsible use
 
-MIT License — see [LICENSE](LICENSE) for details.
+Before presenting numeric performance as validated, evaluate against known ground truth and publish the dataset size, camera conditions, metrics, exclusions, and failures. Synthetic examples and a successful code path are not evidence of general accuracy.
 
----
+Blackbox is not a legal decision tool, an authenticity detector, or a replacement for police, a collision reconstruction expert, or legal advice. Use staged or appropriately licensed footage for demonstrations. Do not use illustrative 3D scenes as source evidence.
 
-<div align="center">
+## Background
 
-Built with ❤️ for safer roads · Meta Global AI Developer Hackathon 2026
+The WHO estimated 1.19 million annual road-traffic deaths in its 2023 global status report. India's Ministry of Road Transport and Highways reported 172,890 road-traffic fatalities in 2023. These figures describe the scale of the safety problem; they do not establish Blackbox's market size or prove that usable video exists for every incident. Sources: [WHO Global status report on road safety 2023](https://www.who.int/publications/i/item/9789240086517) and [Road Accidents in India 2023, Ministry of Road Transport and Highways](https://morth.nic.in/sites/default/files/Road-Accident-in-India-2023-Publications.pdf).
 
-</div>
+## License
+
+This project is released under the MIT License. See [LICENSE](LICENSE).

@@ -1072,3 +1072,210 @@ tbody tr:hover { background: #f8f7f2; }
   .review-clips-grid,.review-audio-grid { grid-template-columns:1fr; }
   .review-annotation-grid { grid-template-columns:1fr; }
 }
+
+/* ── Product-wide usability pass: readable hierarchy, clear actions, calm feedback ── */
+:root {
+  --text-xs: .8125rem;
+  --text-sm: .9375rem;
+  --text-base: 1rem;
+  --text-md: 1.125rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 1.875rem;
+  --text-3xl: 2.375rem;
+  --text-4xl: 3rem;
+  --sidebar-w: 264px;
+  --shadow-focus: 0 0 0 3px rgba(52,93,73,.22);
+}
+
+body { font-size: 16px; line-height: 1.65; }
+p { line-height: 1.7; }
+.text-xs { font-size: 13px; }
+.text-sm { font-size: 15px; }
+.text-base { font-size: 16px; }
+.eyebrow { font-size: 12px; letter-spacing: .1em; }
+.page-header { margin-bottom: 40px; }
+.page-header h1 { font-size: clamp(2rem, 3.6vw, 2.75rem); line-height: 1.12; letter-spacing: -.04em; }
+.page-header p { font-size: 16px; line-height: 1.65; }
+.page-content { padding: 44px clamp(22px, 4vw, 64px) 64px; }
+
+/* Real, comfortable hit areas on mouse, touch and keyboard. */
+.btn {
+  min-height: 44px;
+  padding: 10px 18px;
+  border-radius: 6px;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.35;
+  justify-content: center;
+  transition: color .16s ease, background-color .16s ease, border-color .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+.btn-sm { min-height: 40px; padding: 8px 14px; font-size: 14px; }
+.btn-lg { min-height: 52px; padding: 13px 22px; font-size: 16px; }
+.btn:focus-visible, button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 3px solid rgba(52,93,73,.42);
+  outline-offset: 3px;
+}
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled { opacity: .58; }
+.btn-primary { color: #fff; background: #315b45; border-color: #315b45; }
+.btn-primary:hover:not(:disabled) { background: #244a37; border-color: #244a37; box-shadow: 0 3px 9px rgba(36,74,55,.16); }
+.btn-secondary { color: #2e3c33; border-color: #b8c0b6; background: #fffefa; }
+.btn-secondary:hover:not(:disabled) { color: #203b2b; border-color: #687b6d; background: #f1f4ef; }
+.btn-ghost { color: #435348; }
+.btn-ghost:hover:not(:disabled) { background: #e8ece6; }
+.btn-danger { color: #813c35; background: #f8eeeb; border-color: #d9aaa3; }
+
+a:not(.btn):hover { text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.nav-item { min-height: 44px; padding: 10px 12px; gap: 12px; font-size: 15px; font-weight: 500; }
+.sidebar { padding-top: 24px; }
+.sidebar-logo-name { font-size: 17px; }
+.sidebar-logo-sub { font-size: 12px; }
+.sidebar-section-label { padding: 22px 12px 9px; color: #727a70; font-size: 11px; letter-spacing: .1em; }
+.sidebar-footer { font-size: 13px; }
+.nav-glyph { font-size: 18px; }
+
+.form-label { font-size: 15px; font-weight: 650; }
+.form-input, .form-textarea, .form-select { min-height: 48px; padding: 11px 14px; font-size: 16px; }
+.form-textarea { min-height: 112px; }
+.form-hint, .form-error { font-size: 13px; line-height: 1.5; }
+input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: max(15px, 1em); }
+input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; accent-color: var(--accent); }
+.badge { min-height: 26px; padding: 4px 10px; font-size: 13px; font-weight: 600; }
+.alert { padding: 15px 17px; font-size: 15px; line-height: 1.55; }
+.card-header { padding: 19px 23px; }
+.card-body { padding: 25px; }
+.card-footer { padding: 16px 22px; }
+.upload-zone { padding: clamp(30px, 5vw, 56px) 24px; }
+.upload-zone h3 { font-size: 21px; }
+.upload-zone p { font-size: 15px; line-height: 1.55; }
+.upload-zone:focus-visible { outline: 3px solid rgba(52,93,73,.42); outline-offset: 3px; }
+
+/* Make secondary information legible without letting it compete with the task. */
+.case-list-toolbar h2 { font-size: 18px; }
+.case-list-toolbar p { font-size: 14px; }
+.case-search { min-height: 44px; padding-inline: 13px; }
+.case-search input { height: 42px; font-size: 15px; }
+.case-table { font-size: 14px; }
+.case-table th { padding: 14px 14px; font-size: 11px; letter-spacing: .08em; }
+.case-table td { padding: 17px 14px; }
+.case-title { font-size: 15px; }
+.case-description { max-width: 420px; font-size: 13px; line-height: 1.5; }
+.case-muted { font-size: 14px; }
+.case-status { min-height: 28px; padding: 4px 9px; font-size: 12px; }
+.case-open-link { min-height: 40px; display: inline-flex; align-items: center; font-size: 14px; }
+.case-empty p, .case-error div, .case-loading, .workspace-footnote { font-size: 14px; }
+.phase5-nav, .phase5-sections, .radar-summary, .scene3d-toolbar, .scene3d-legend span,
+.scene3d-timebar, .scene3d-provenance, .scene3d-limitations, .scene-source-note,
+.review-timebar, .review-common-time, .review-note, .review-event-list li { font-size: 14px; }
+.scene-toggle, .scene-zoom, .radar-priority, .atlas-metrics dt, .atlas-metrics dd,
+.export-hashes dt, .review-offset-form label, .review-annotation-fields label,
+.review-annotation-editor > label, .review-version span, .review-version p { font-size: 13px; }
+.scene3d-camera-unknown { padding: 7px 11px; font-size: 13px; }
+.review-section-title p { font-size: 15px; }
+.review-clip-card h3, .review-audio-card h3 { font-size: 17px; }
+.review-disclosure-summary { min-height: 88px; }
+.review-disclosure-summary strong { font-size: 16px; }
+.review-disclosure-summary small { font-size: 13px; }
+.review-disclosure-action { font-size: 13px; }
+.media-more > summary, .media-advanced > summary { min-height: 40px; display: inline-flex; align-items: center; font-size: 14px; }
+.media-option { min-height: 40px; padding: 9px 10px; font-size: 14px; }
+.media-hash { font-size: 11px; }
+.upload-error-row { font-size: 14px; line-height: 1.5; }
+.steps { margin-bottom: 30px; }
+.step-circle { width: 38px; height: 38px; font-size: 15px; }
+.step-label { font-size: 14px; }
+
+@media (max-width: 900px) {
+  .page-content { padding: 32px 24px 48px; }
+}
+@media (max-width: 680px) {
+  body { font-size: 16px; }
+  .page-content { padding: 28px 18px 40px; }
+  .page-header { margin-bottom: 28px; }
+  .page-header h1 { font-size: clamp(1.9rem, 8vw, 2.35rem); }
+  .sidebar { justify-content: flex-start; gap: 14px; overflow-x: auto; }
+  .sidebar-nav { gap: 4px; overflow-x: auto; }
+  .nav-item { min-height: 42px; padding: 8px 10px; font-size: 14px; white-space: nowrap; }
+  .nav-item-icon { display: inline-flex; }
+  .case-table-wrap { overflow-x: auto; }
+  .case-list-toolbar { padding: 18px; }
+  .case-empty { padding: 48px 20px; }
+  .card-body { padding: 20px; }
+  .card-header { padding: 16px 18px; }
+  .card-footer { padding: 14px 16px; }
+  .upload-zone { padding: 32px 18px; }
+  .upload-zone h3 { font-size: 19px; }
+  .btn { min-height: 46px; }
+  .btn-sm { min-height: 42px; }
+  .home-nav nav > a:first-child { font-size: 14px; }
+  .home-caveat, .home-footer { font-size: 13px; }
+  .brief-topline, .home-brief dt { font-size: 11px; }
+  .home-brief dd, .process-steps p { font-size: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+
+/* Claims and transcript workspaces share a consistent, responsive review layout. */
+.claims-page, .transcripts-page { max-width: 1440px; }
+.claims-toolbar, .transcripts-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 16px 18px; }
+.claims-toolbar-label { color: #646d64; font-size: 14px; font-weight: 650; }
+.claims-layout { display: grid; grid-template-columns: repeat(4, minmax(220px, 1fr)); align-items: start; gap: 16px; }
+.claim-column { min-height: 230px; padding: 14px; border: 1px solid rgba(40,55,44,.09); border-radius: 8px; }
+.claim-column-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; color: #303a32; font-size: 15px; font-weight: 700; }
+.claim-column-list { display: grid; gap: 10px; }
+.claim-card { display: grid; gap: 12px; width: 100%; min-height: 100px; padding: 15px; border: 1px solid #e0e2dc; border-radius: 7px; background: #fffefa; color: #343a34; text-align: left; cursor: pointer; transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
+.claim-card:hover { border-color: #9eafa0; box-shadow: 0 3px 10px rgba(32,35,31,.07); transform: translateY(-1px); }
+.claim-card:focus-visible { outline: 3px solid rgba(52,93,73,.38); outline-offset: 2px; }
+.claim-card p { margin: 0; font-size: 15px; line-height: 1.55; }
+.claim-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.claim-tag { padding: 4px 8px; border-radius: 4px; background: #e8eff0; color: #355c64; font-size: 12px; font-weight: 600; }
+.claims-empty { padding: 18px 10px; color: #697168; font-size: 14px; text-align: center; }
+.claim-overlay { position: fixed; inset: 0; z-index: 80; display: flex; justify-content: flex-end; background: rgba(27,32,28,.4); backdrop-filter: blur(2px); }
+.claim-panel { width: min(560px, 100%); height: 100%; overflow-y: auto; border: 0; border-left: 1px solid var(--line); border-radius: 0; background: var(--panel); box-shadow: -12px 0 36px rgba(23,32,25,.12); }
+.claim-panel-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 20px 24px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.claim-panel-body { display: grid; gap: 22px; padding: 24px; }
+.claim-statement { font-size: 18px; line-height: 1.55; color: var(--ink); }
+.claim-verdict { padding: 18px; border: 1px solid var(--line); border-radius: 7px; }
+.claim-verdict p { margin: 10px 0 0; font-size: 15px; }
+.transcripts-layout { display: grid; grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr); align-items: start; gap: 22px; }
+.transcript-column { display: grid; align-content: start; gap: 18px; min-width: 0; }
+.transcript-video { width: 100%; max-height: 440px; background: #111; }
+.transcript-video-meta { padding: 12px 15px; color: #586258; font: 13px/1.5 var(--font-mono); overflow-wrap: anywhere; }
+.transcript-source-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 13px 14px; border: 1px solid var(--line); border-radius: 6px; }
+.transcript-source-name { min-width: 0; color: #384139; font-size: 14px; overflow-wrap: anywhere; }
+.transcript-tabs { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px; }
+.transcript-tab { min-height: 40px; }
+.transcript-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 16px; line-height: 1.75; }
+.transcript-segment { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: start; gap: 12px; padding: 14px 16px; border-top: 1px solid var(--line); cursor: pointer; }
+.transcript-segment:hover { background: #f6f6f0; }
+.transcript-segment span:last-child { font-size: 15px; line-height: 1.55; }
+.speaker-tag { padding: 4px 9px; border-radius: 999px; color: white; font-size: 12px; font-weight: 650; }
+.calibration-page { color: #384139 !important; }
+.calibration-page h1 { font-size: clamp(1.9rem, 3vw, 2.4rem); }
+.calibration-page p, .calibration-page li { font-size: 15px; line-height: 1.6; }
+.calibration-page label { font-size: 15px !important; line-height: 1.5; }
+.calibration-page summary { font-size: 15px !important; line-height: 1.5; }
+.calibration-page small { font-size: 13px; }
+.calibration-page input:not([type="checkbox"]) { min-height: 46px; font-size: 16px !important; }
+.calibration-page button { min-height: 42px; }
+.calibration-page .card { border-radius: 8px; }
+.calibration-page .card > strong { display: inline-block; margin-bottom: 8px; font-size: 17px; }
+@media (max-width: 1100px) {
+  .claims-layout { grid-template-columns: repeat(2, minmax(220px, 1fr)); }
+  .transcripts-layout { grid-template-columns: 1fr; }
+  .calibration-layout { grid-template-columns: minmax(0, 1.4fr) minmax(290px, .9fr) !important; }
+}
+@media (max-width: 680px) {
+  .claims-layout { grid-template-columns: 1fr; }
+  .claim-column { min-height: 0; }
+  .claim-panel-head, .claim-panel-body { padding: 18px; }
+  .claim-statement { font-size: 17px; }
+  .claims-toolbar { align-items: stretch; }
+  .claims-toolbar .btn { width: 100%; }
+  .transcript-source-row { align-items: flex-start; flex-direction: column; }
+  .transcript-tabs { padding: 10px; }
+  .calibration-layout, .calibration-point-fields { grid-template-columns: 1fr !important; }
+  .calibration-page { padding: 20px 16px 36px !important; }
+}

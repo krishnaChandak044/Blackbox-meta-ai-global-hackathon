@@ -219,7 +219,13 @@ export default function CaseDetailPage() {
               role="button"
               tabIndex={0}
               aria-label="Upload video clips"
-              onKeyDown={(e) => e.key === "Enter" && fileInputRef.current?.click()}
+              aria-describedby="upload-help"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  fileInputRef.current?.click();
+                }
+              }}
             >
               <input
                 ref={fileInputRef}
@@ -235,7 +241,7 @@ export default function CaseDetailPage() {
                 </svg>
               </div>
               <h3>Choose video clips or drag them here</h3>
-              <p>MP4, MOV, AVI, WebM · up to 500 MB each · {3 - media.length} upload slot{3 - media.length !== 1 ? "s" : ""} available</p>
+              <p id="upload-help">MP4, MOV, AVI, WebM · up to 500 MB each · {3 - media.length} upload slot{3 - media.length !== 1 ? "s" : ""} available</p>
             </div>
           )}
 

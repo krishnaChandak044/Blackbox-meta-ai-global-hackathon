@@ -121,7 +121,7 @@ export default function CalibrationPage({ params }: PageProps) {
   const step = complete ? 3 : anchors.length >= 5 ? 2 : 1;
 
   return (
-    <main style={{ maxWidth: 1440, margin: "0 auto", padding: "24px clamp(16px, 3vw, 40px) 48px", color: "var(--text-primary)" }}>
+    <main className="calibration-page" style={{ maxWidth: 1440, margin: "0 auto", padding: "24px clamp(16px, 3vw, 40px) 48px", color: "var(--text-primary)" }}>
       <header style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 22 }}>
         <Link href={`/cases/${caseId}`} className="btn btn-ghost" style={{ padding: "6px 10px" }}>← Case</Link>
         <div><h1 className="heading-sm" style={{ margin: 0 }}>Calibrate this camera</h1><p className="text-sm text-tertiary" style={{ margin: "4px 0 0" }}>{media?.original_filename}</p></div>
@@ -141,7 +141,7 @@ export default function CalibrationPage({ params }: PageProps) {
         {["1. Add 5 measured road points", "2. Fit the ground plane", "3. Check the result"].map((label, i) => <div key={label} style={{ borderRadius: 999, padding: "8px 14px", fontSize: 13, background: step >= i + 1 ? "var(--sage-light)" : "var(--bg-secondary)", color: step >= i + 1 ? "var(--sage-dark)" : "var(--text-tertiary)" }}>{label}</div>)}
       </nav>
 
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.7fr) minmax(320px, 0.9fr)", gap: 18, alignItems: "start" }}>
+      <div className="calibration-layout" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.7fr) minmax(320px, 0.9fr)", gap: 18, alignItems: "start" }}>
         <section className="card" style={{ padding: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
             <strong>1. Pause and mark a road point</strong><span className="text-sm text-tertiary">{anchors.length} saved · need at least 5</span>
@@ -163,7 +163,7 @@ export default function CalibrationPage({ params }: PageProps) {
           {!frozenFrame && <p className="text-sm text-tertiary" style={{ margin: "8px 0 0" }}>Pause on the frame you want, then press “Freeze this frame to mark points”.</p>}
           {pending && <div style={{ marginTop: 14, padding: 16, border: "1px solid var(--sky-mid)", borderRadius: 10, background: "var(--sky-light)" }}>
             <strong>Describe the selected point</strong><span className="text-sm text-tertiary"> · video pixel ({pending.pixel_x.toFixed(0)}, {pending.pixel_y.toFixed(0)})</span>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
+            <div className="calibration-point-fields" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
               <label style={{ fontSize: 13 }}>Point name<input style={inputStyle} value={pending.label} onChange={e => setPending(p => p && ({ ...p, label: e.target.value }))} placeholder="e.g. near-left stop-line corner" /></label>
               <div style={{ display: "flex", gap: 8, alignItems: "end", fontSize: 12, color: "var(--text-tertiary)" }}>Use a tape/GPS/site plan. X and Y must describe the same physical point shown in the video.</div>
               <label style={{ fontSize: 13 }}>X position (metres)<input style={inputStyle} type="number" step="any" value={pending.world_x} onChange={e => setPending(p => p && ({ ...p, world_x: e.target.value }))} placeholder="0" /></label>
