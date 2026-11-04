@@ -57,5 +57,10 @@ out/
 # Local evidence and generated test artifacts
 storage/
 blackbox.db
+*.db
+*.sqlite
+*.sqlite3
+fixtures/staged/**/*.mp4
+*.mp4
 .coverage
 htmlcov/
