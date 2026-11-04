@@ -84,3 +84,4 @@ def test_g8_scenario_3_inadequate_second_view():
 def test_g8_overall_suite():
     summary = run_g8_suite()
     assert summary["status"] == "PASS"
+

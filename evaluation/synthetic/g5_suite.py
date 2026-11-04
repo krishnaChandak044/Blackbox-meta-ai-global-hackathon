@@ -347,3 +347,4 @@ if __name__ == "__main__":
                 f"Est: {r.estimated_speed_kmh:5.2f} [{r.speed_lo_kmh:5.2f}, {r.speed_hi_kmh:5.2f}] | "
                 f"Err: {r.speed_error_kmh:.3f} km/h | Covered: {r.interval_contains_truth}"
             )
+
