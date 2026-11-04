@@ -174,3 +174,4 @@ if __name__ == "__main__":
     result = run_g7_acceptance()
     if result["status"] != "FULL_PASS":
         sys.exit(1)
+

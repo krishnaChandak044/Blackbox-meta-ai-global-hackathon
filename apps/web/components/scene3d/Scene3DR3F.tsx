@@ -426,3 +426,4 @@ export default function Scene3DR3F({ scene, onToggle2DFallback }: Scene3DR3FProp
     </div>
   );
 }
+
