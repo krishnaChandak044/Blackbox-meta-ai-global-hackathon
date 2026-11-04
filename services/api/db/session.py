@@ -1,12 +1,17 @@
-"""Database session and initialization."""
+"""Database session management.
+
+Schema is managed exclusively by Alembic migrations.
+Run `alembic upgrade head` before starting the API for the first time
+or after pulling new migrations.
+
+Do NOT call Base.metadata.create_all() here — it bypasses migration
+tracking and causes schema drift on existing deployments.
+"""
 
 import os
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy import inspect, text
-
-from services.api.db.models import Base
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./blackbox.db")
 
@@ -20,17 +25,15 @@ AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 
 async def init_db() -> None:
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    """Verify the database engine is reachable at startup.
 
-        def ensure_calibration_validation_column(sync_conn) -> None:
-            columns = {column["name"] for column in inspect(sync_conn).get_columns("homography_fits")}
-            if "validation_anchor_count" not in columns:
-                sync_conn.execute(text(
-                    "ALTER TABLE homography_fits ADD COLUMN validation_anchor_count INTEGER NOT NULL DEFAULT 0"
-                ))
-
-        await conn.run_sync(ensure_calibration_validation_column)
+    Schema creation and migrations are handled by Alembic, not here.
+    Run ``alembic upgrade head`` before starting the server on a new
+    deployment or after pulling new migration files.
+    """
+    # Lightweight connectivity check only — no DDL.
+    async with engine.connect() as conn:
+        await conn.run_sync(lambda c: None)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
