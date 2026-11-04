@@ -1,6 +1,7 @@
 """API tests phase3"""
 import os,uuid,time
 import pytest
+import pytest_asyncio
 from httpx import AsyncClient,ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine,async_sessionmaker
 from services.api.db.models import Base
@@ -9,7 +10,7 @@ TEST_DB=f"sqlite+aiosqlite:///./test_p3api_{uuid.uuid4().hex[:8]}.db"
 os.environ["DATABASE_URL"]=TEST_DB
 os.environ["SECRET_KEY"]="test-secret-key-32-chars-minimum-xxxx"
 os.environ["BLACKBOX_ACCESS_PASSWORD"]="testpass"
-@pytest.fixture(scope="module")
+@pytest_asyncio.fixture
 async def client():
     eng=create_async_engine(TEST_DB,connect_args={"check_same_thread":False})
     async with eng.begin() as c: await c.run_sync(Base.metadata.create_all)
@@ -26,7 +27,7 @@ async def ah():
     exp=int(time.time())+3600
     from services.api.auth.session import _signature
     return {"Cookie": f"blackbox_session={exp}.{_signature(exp)}"}
-@pytest.fixture
+@pytest_asyncio.fixture
 async def cid(client):
     h=await ah()
     r=await client.post("/api/v1/cases/",json={"title":"API P3","consent_given":True},headers=h)

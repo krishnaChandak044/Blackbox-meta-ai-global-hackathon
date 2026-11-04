@@ -247,12 +247,12 @@ def check_claim(
             return ClaimVerdict(
                 claim_id=claim.id,
                 verdict="insufficient_data",
-                confidence=0.0,
+                confidence=1.0,
                 evidence_frame_start=None,
                 evidence_frame_end=None,
                 evidence_world_positions=None,
                 explanation=(
-                    "Speed cannot be verified from this clip because a validated real-world scale is unavailable. "
+                    "Speed cannot be verified from this clip because camera calibration and a validated real-world scale are unavailable. "
                     "The video and relative timing can still be reviewed; do not estimate speed from guessed scene measurements."
                 ),
                 checked_at=now,

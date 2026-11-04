@@ -100,7 +100,7 @@ def video_bytes(tmp_path: Path) -> bytes:
             "-f",
             "lavfi",
             "-i",
-            "color=c=black:s=160x120:r=10:d=1",
+            "color=c=black:s=640x480:r=10:d=1",
             "-c:v",
             "mpeg4",
             "-y",
@@ -312,6 +312,7 @@ async def test_calibration_fit_via_api(client: AsyncClient, video_bytes: bytes):
             "is_distance_ref_b": True,
         },
         {"label": "D", "pixel_x": 100, "pixel_y": 220, "world_x": 0.0, "world_y": 6.0},
+        {"label": "E", "pixel_x": 200, "pixel_y": 160, "world_x": 5.0, "world_y": 3.0},
     ]
     for p in anchor_payloads:
         r = await client.post(
@@ -324,10 +325,11 @@ async def test_calibration_fit_via_api(client: AsyncClient, video_bytes: bytes):
     assert fit_r.status_code == 201, fit_r.text
     fit = fit_r.json()
 
-    assert fit["anchor_count"] == 4
+    assert fit["anchor_count"] == 5
+    assert fit["validation_anchor_count"] == 1
     assert fit["reprojection_rmse_px"] < 1.0, f"RMSE too large: {fit['reprojection_rmse_px']}"
     assert len(fit["H"]) == 3 and len(fit["H"][0]) == 3
-    assert len(fit["per_anchor_errors_px"]) == 4
+    assert len(fit["per_anchor_errors_px"]) == 5
 
     # Scale should be derived (anchors B + C form the reference pair)
     assert fit["scale_metres_per_pixel"] is not None
@@ -362,7 +364,10 @@ async def test_tracks_run_queues_job(client: AsyncClient, monkeypatch, video_byt
         type("T", (), {"delay": staticmethod(fake_delay)})(),
     )
 
-    run_r = await client.post(f"/api/v1/cases/{case_id}/media/{media_id}/tracks/run")
+    run_r = await client.post(
+        f"/api/v1/cases/{case_id}/media/{media_id}/tracks/run",
+        json={"confirm_external_processing": True},
+    )
     assert run_r.status_code == 202, run_r.text
     assert "job_id" in run_r.json()
     assert len(dispatched) == 1

@@ -1,6 +1,7 @@
 """Phase3 engine tests + API (merged)."""
 import os, uuid, time  # noqa
 import pytest  # noqa
+import pytest_asyncio  # noqa
 from httpx import AsyncClient, ASGITransport  # noqa
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker  # noqa
 from services.api.db.models import Base  # noqa
@@ -73,7 +74,7 @@ def test_synthetic_deterministic():
     r2=a.transcribe("p.mp4",media_id="same",duration_seconds=10)
     assert r1.raw_text==r2.raw_text
 
-@pytest.fixture(scope="module")
+@pytest_asyncio.fixture
 async def client():
     eng=create_async_engine(TEST_DB,connect_args={"check_same_thread":False})
     async with eng.begin() as c: await c.run_sync(Base.metadata.create_all)
@@ -90,7 +91,7 @@ async def ah():
     exp=int(time.time())+3600
     from services.api.auth.session import _signature
     return {"Cookie": f"blackbox_session={exp}.{_signature(exp)}"}
-@pytest.fixture
+@pytest_asyncio.fixture
 async def cid(client):
     h=await ah()
     r=await client.post("/api/v1/cases/",json={"title":"API P3","consent_given":True},headers=h)

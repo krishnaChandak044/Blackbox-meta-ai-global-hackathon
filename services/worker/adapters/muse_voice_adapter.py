@@ -89,8 +89,9 @@ class MuseVoiceAdapter:
     TRANSCRIPTION_MODEL = "muse-voice-transcribe-1.0"
 
     def __init__(self, api_url: str | None = None, api_key: str | None = None) -> None:
-        self.api_url = (api_url or os.getenv("MUSE_VOICE_API_URL", "")).rstrip("/")
-        self.api_key = api_key or os.getenv("MUSE_VOICE_API_KEY", "")
+        raw_url = api_url if api_url is not None else os.getenv("MUSE_VOICE_API_URL", "")
+        self.api_url = raw_url.rstrip("/")
+        self.api_key = api_key if api_key is not None else os.getenv("MUSE_VOICE_API_KEY", "")
 
     @staticmethod
     def _endpoint(base_url: str) -> str:

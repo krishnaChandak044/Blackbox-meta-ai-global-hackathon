@@ -210,7 +210,7 @@ async def get_track(
 async def run_tracking(
     case_id: str,
     media_id: str,
-    payload: TrackingRunRequest,
+    payload: TrackingRunRequest = TrackingRunRequest(),
     db: AsyncSession = Depends(get_db),
     user: str = Depends(current_user),
 ) -> dict:
