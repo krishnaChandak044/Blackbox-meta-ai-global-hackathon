@@ -337,3 +337,4 @@ if __name__ == "__main__":
     for c in result["checks"]:
         status_icon = "✅" if c["passed"] else "❌"
         print(f"  {status_icon} {c['check']}")
+

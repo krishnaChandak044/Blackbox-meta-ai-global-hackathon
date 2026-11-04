@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import Scene3D from "@/components/scene3d/Scene3D";
+import Scene3DWrapper from "@/components/scene3d/Scene3DWrapper";
 import { phase5Api, type Scene3D as SceneData } from "@/lib/api";
 
 export default function ScenePage() {
@@ -29,7 +29,7 @@ export default function ScenePage() {
       {error && <div className="alert alert-error mb-4" role="alert">{error}<button className="btn btn-secondary btn-sm" style={{ marginLeft: 12 }} onClick={() => void load()}>Retry</button></div>}
       {loading && <div className="card card-body flex items-center gap-3"><div className="spinner" /> Loading scene data…</div>}
       {!loading && scene && <>
-        <section className="card card-body scene-page-card"><Scene3D scene={scene} /></section>
+        <section className="card card-body scene-page-card"><Scene3DWrapper scene={scene} /></section>
         <div className="scene-source-note"><strong>What this view can show</strong><span>Track positions in the calibrated ground plane, fitted paths, and labelled model scenarios.</span><strong>What this view does not infer</strong><span>Vehicle dimensions, height, camera pose, unseen surfaces, or legal fault.</span></div>
       </>}
     </main>
