@@ -129,3 +129,4 @@ export default function Scene3DWrapper({ scene }: { scene: SceneData }) {
     </WebGLErrorBoundary>
   );
 }
+
