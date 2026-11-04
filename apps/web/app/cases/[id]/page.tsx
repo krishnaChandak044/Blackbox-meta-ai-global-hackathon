@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import InvestigationOverview from "@/components/investigation/InvestigationOverview";
 import {
-  casesApi, mediaApi, jobsApi,
+  casesApi, mediaApi, jobsApi, tracksApi,
   formatBytes, shortHash, relativeTime,
   type Case, type SourceMedia, type IntegrityCheck, type Job,
 } from "@/lib/api";
@@ -43,6 +44,9 @@ export default function CaseDetailPage() {
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [integrity, setIntegrity] = useState<Record<string, IntegrityCheck>>({});
+  const [allowMetaProcessing, setAllowMetaProcessing] = useState(false);
+  const [automaticAnalysis, setAutomaticAnalysis] = useState<Record<string, string>>({});
+  const requestedTracking = useRef<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async () => {
@@ -61,6 +65,22 @@ export default function CaseDetailPage() {
   }, [id]);
 
   useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    for (const clip of media) {
+      if (clip.status !== "indexed" || requestedTracking.current.has(clip.id)) continue;
+      if (jobs.some(job => job.media_id === clip.id && job.stage === "track")) continue;
+      if (!allowMetaProcessing) continue;
+      requestedTracking.current.add(clip.id);
+      setAutomaticAnalysis(previous => ({ ...previous, [clip.id]: "Starting object tracking…" }));
+      void tracksApi.run(id, clip.id, true).then(() => {
+        setAutomaticAnalysis(previous => ({ ...previous, [clip.id]: "Tracking queued. Review the results when processing finishes." }));
+        void refresh();
+      }).catch((cause: unknown) => {
+        requestedTracking.current.delete(clip.id);
+        setAutomaticAnalysis(previous => ({ ...previous, [clip.id]: `Automatic tracking could not start: ${cause instanceof Error ? cause.message : "Unknown error"}` }));
+      });
+    }
+  }, [media, jobs, allowMetaProcessing, id, refresh]);
   useEffect(() => {
     if (!media.some(item => item.status === "stored" || item.status === "probing") &&
         !jobs.some(item => item.status === "queued" || item.status === "running" || item.status === "retrying")) return;
@@ -194,6 +214,8 @@ export default function CaseDetailPage() {
           {media.length === 0 ? <><div><strong>Start with the footage</strong><p className="text-sm text-secondary mt-1">Add a clip to preserve the original and begin reviewing what it shows.</p></div><Link href="#source-media" className="btn btn-primary">Add footage <span aria-hidden="true">↓</span></Link></> : <><div><strong>Your footage is ready to review</strong><p className="text-sm text-secondary mt-1">Compare clips, add source-linked observations, or prepare a traceable report.</p></div><div className="flex gap-2" style={{ flexWrap: "wrap" }}><Link href={`/cases/${id}/review-workspace`} className="btn btn-primary">Review footage <span aria-hidden="true">→</span></Link><Link href={`/cases/${id}/reports`} className="btn btn-secondary">Evidence &amp; reports</Link></div></>}
         </div>
 
+        <InvestigationOverview caseId={id} media={media} jobs={jobs} />
+
         {actionError && <div className="alert alert-error mb-4" role="alert"><span>{actionError}</span><button className="btn btn-ghost btn-sm" onClick={() => setActionError(null)}>Dismiss</button></div>}
 
         {/* Source Media */}
@@ -209,6 +231,10 @@ export default function CaseDetailPage() {
           </div>
 
           {/* Upload zone */}
+          {canUpload && <label className="card card-body mb-4" style={{ display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer" }}>
+            <input type="checkbox" checked={allowMetaProcessing} onChange={event => setAllowMetaProcessing(event.target.checked)} style={{ marginTop: 5 }} />
+            <span><strong>Analyze clips automatically after upload</strong><br /><span className="text-sm text-secondary">I authorize sending these clips to Meta Model API for object tracking. Original footage is preserved in Blackbox. You can still upload without enabling this.</span></span>
+          </label>}
           {canUpload && (
             <div
               className={`upload-zone mb-6 ${dragOver ? "drag-over" : ""}`}
@@ -295,6 +321,8 @@ export default function CaseDetailPage() {
                           <td>
                             <div style={{ fontWeight: 500 }}>{m.original_filename}</div>
                             <div className="text-xs text-secondary">{formatBytes(m.byte_length)} · Added {relativeTime(m.upload_time)}</div>
+                            {automaticAnalysis[m.id] && <div className="text-xs text-secondary" role="status">{automaticAnalysis[m.id]}</div>}
+                            {jobs.some(job => job.media_id === m.id && job.stage === "track" && job.status === "done") && <Link className="text-xs" href={`/cases/${id}/media/${m.id}/tracks`}>View detected objects →</Link>}
                           </td>
                           <td><span className={`badge ${ms.cls}`}>{ms.label}</span></td>
                           <td className="text-sm">
