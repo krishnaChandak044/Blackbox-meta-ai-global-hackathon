@@ -1,4 +1,4 @@
-.PHONY: setup dev test lint typecheck demo clean
+.PHONY: setup dev test lint typecheck demo clean migrate db-migrate db-rollback db-revision db-reset
 
 # ── Setup ──────────────────────────────────────────────────────────────────────
 setup:
@@ -27,14 +27,25 @@ dev-web:
 	npm run dev --workspace=apps/web
 
 # ── Database ───────────────────────────────────────────────────────────────────
-db-migrate:
+# Schema is managed exclusively by Alembic. Run `make migrate` before starting
+# the API for the first time or after pulling new migration files.
+# Never use Base.metadata.create_all() as a substitute for migrations.
+
+migrate:
 	.venv/bin/alembic upgrade head
+
+db-migrate: migrate
 
 db-rollback:
 	.venv/bin/alembic downgrade -1
 
 db-revision:
 	.venv/bin/alembic revision --autogenerate -m "$(msg)"
+
+db-reset:
+	@echo "⚠ This drops ALL tables. Only use in local development."
+	.venv/bin/alembic downgrade base
+	.venv/bin/alembic upgrade head
 
 # ── Tests ──────────────────────────────────────────────────────────────────────
 test:

@@ -27,6 +27,48 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: pytest engine/ services/ -x --tb=short
 
+  migrate-sqlite:
+    name: Migration smoke test (SQLite)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -e ".[dev]"
+      - name: Fresh upgrade from base
+        run: alembic upgrade head
+        env:
+          DATABASE_URL: sqlite:///./ci_test.db
+      - name: Verify all expected tables exist
+        run: |
+          python - <<'EOF'
+          import sqlite3, sys
+          expected = {
+            "cases","source_media","derived_artifacts","processing_jobs","processing_log",
+            "calibration_anchors","homography_fits","object_tracks","track_points",
+            "transcripts","transcript_claims","claim_checks",
+            "dynamics_runs","counterfactual_runs","rival_searches",
+            "evidence_needs","reviewer_actions",
+            "atlas_consents","atlas_consent_events","atlas_contributions",
+            "export_records","alembic_version",
+          }
+          conn = sqlite3.connect("ci_test.db")
+          found = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+          missing = expected - found
+          if missing:
+              print(f"MISSING TABLES: {missing}", file=sys.stderr)
+              sys.exit(1)
+          print(f"OK — {len(found)} tables present")
+          EOF
+      - name: Full downgrade then re-upgrade (round-trip)
+        run: |
+          alembic downgrade base
+          alembic upgrade head
+        env:
+          DATABASE_URL: sqlite:///./ci_test.db
+      - name: Cleanup
+        run: rm -f ci_test.db
+
   lint-web:
     runs-on: ubuntu-latest
     steps:
