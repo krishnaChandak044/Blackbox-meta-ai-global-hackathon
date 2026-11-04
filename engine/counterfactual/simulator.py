@@ -143,5 +143,5 @@ def compute_sensitivity(
             deltas.append((value, (result.stopping_distance_m or 0.0) - base))
         value, delta = max(deltas, key=lambda item: abs(item[1]))
         unit, evidence = specs[name]
-        output.append(SensitivityEntry(name, value, unit, float(delta), evidence))
+        output.append(SensitivityEntry(name, float(value), float(delta), evidence))
     return sorted(output, key=lambda item: abs(item.stopping_distance_delta_m), reverse=True)
