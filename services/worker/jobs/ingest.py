@@ -4,14 +4,14 @@ import asyncio
 import os
 import uuid
 from pathlib import Path
-from sqlalchemy import select
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from services.api.db.models import (
-    DerivedArtifact,
     Case,
     CaseStatus,
+    DerivedArtifact,
     JobStatus,
     MediaStatus,
     ProcessingJob,
@@ -88,7 +88,17 @@ async def process_media(media_id: str, job_id: str) -> None:
             finally:
                 case = await db.get(Case, media.case_id)
                 if case is not None:
-                    statuses = (await db.execute(select(SourceMedia.status).where(SourceMedia.case_id == media.case_id))).scalars().all()
+                    statuses = (
+                        (
+                            await db.execute(
+                                select(SourceMedia.status).where(
+                                    SourceMedia.case_id == media.case_id
+                                )
+                            )
+                        )
+                        .scalars()
+                        .all()
+                    )
                     if statuses and all(item == MediaStatus.INDEXED for item in statuses):
                         case.status = CaseStatus.READY
                     else:

@@ -17,9 +17,18 @@ from engine.dynamics.models import (
 
 
 def dynamics_result_from_storage(row: Any) -> DynamicsResult:
-    points = [FittedPoint(**item) for item in (json.loads(row.fitted_points_json) if row.fitted_points_json else [])]
+    points = [
+        FittedPoint(**item)
+        for item in (json.loads(row.fitted_points_json) if row.fitted_points_json else [])
+    ]
     uncertainty_data = json.loads(row.uncertainty_json or "{}")
-    for name in ("pixel_localisation", "homography_reprojection", "scale_calibration", "frame_timestamp", "model_assumption"):
+    for name in (
+        "pixel_localisation",
+        "homography_reprojection",
+        "scale_calibration",
+        "frame_timestamp",
+        "model_assumption",
+    ):
         uncertainty_data[name] = UncertaintyContribution(**uncertainty_data[name])
     uncertainty = UncertaintyBundle(**uncertainty_data)
     cert_data = json.loads(row.certificates_json or "{}")

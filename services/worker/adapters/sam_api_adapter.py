@@ -1,4 +1,5 @@
 """SAM 3.1 video tracking through the Meta Model API."""
+
 from __future__ import annotations
 
 import asyncio
@@ -76,20 +77,24 @@ class SamMetaApiTracker:
             remote_file_id = uploaded.id
             timestamps = _source_timestamps(source)
             selected = set(category_filter) if category_filter else {"vehicle", "pedestrian"}
-            concepts = [(category, phrase) for category, phrase in self.CONCEPTS if category in selected]
+            concepts = [
+                (category, phrase) for category, phrase in self.CONCEPTS if category in selected
+            ]
             grouped: dict[str, dict[int, TrackPoint]] = defaultdict(dict)
 
             for category, phrase in concepts:
                 stream = await client.responses.create(
                     model=self.MODEL_VERSION,
-                    input=[{
-                        "type": "message",
-                        "role": "user",
-                        "content": [
-                            {"type": "input_text", "text": phrase},
-                            {"type": "input_video", "file_id": remote_file_id},
-                        ],
-                    }],
+                    input=[
+                        {
+                            "type": "message",
+                            "role": "user",
+                            "content": [
+                                {"type": "input_text", "text": phrase},
+                                {"type": "input_video", "file_id": remote_file_id},
+                            ],
+                        }
+                    ],
                     stream=True,
                     metadata={"mask_encoding": "one_bit", "include_confidence": "true"},
                 )
@@ -104,7 +109,9 @@ class SamMetaApiTracker:
                         continue
                     confidence = record.confidence
                     if confidence is None:
-                        raise AdapterUnavailable("Meta SAM response omitted requested confidence values")
+                        raise AdapterUnavailable(
+                            "Meta SAM response omitted requested confidence values"
+                        )
                     confidence = float(confidence)
                     if confidence < min_confidence:
                         continue
@@ -114,7 +121,10 @@ class SamMetaApiTracker:
                             f"Meta SAM frame {frame_index} does not map to the original video timeline"
                         )
                     box = BoundingBox(
-                        float(record.left), float(record.top), float(record.right), float(record.bottom)
+                        float(record.left),
+                        float(record.top),
+                        float(record.right),
+                        float(record.bottom),
                     )
                     if box.width <= 0 or box.height <= 0:
                         continue
@@ -128,7 +138,9 @@ class SamMetaApiTracker:
                     )
 
             tracks = [
-                Track(track_id=track_id, points=[points[i] for i in sorted(points)], is_complete=True)
+                Track(
+                    track_id=track_id, points=[points[i] for i in sorted(points)], is_complete=True
+                )
                 for track_id, points in grouped.items()
                 if len(points) >= 3
             ]

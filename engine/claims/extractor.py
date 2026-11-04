@@ -12,21 +12,55 @@ Timestamp accuracy contract:
   to None (serialised as 0.0 in the DB) to signal "unknown" — they are
   NEVER inferred from character positions, which is not a valid citation.
 """
+
 from __future__ import annotations
+
 import re
 import uuid
+
 from engine.claims.models import Claim, ClaimAssertion
 
 _SPEED_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
-    ("speed", re.compile(r"\b(?:doing|going|travelling|traveling|moving)\s+(?:at\s+)?(?:about|approximately|around|roughly|at\s+least|over|under)?\s*(\d+(?:\.\d+)?)\s*(?:km/h|kph|kmph|kilometres?\s+per\s+hour|kilometers?\s+per\s+hour|mph|miles?\s+per\s+hour)\b", re.IGNORECASE)),
-    ("speed", re.compile(r"\b(\d+(?:\.\d+)?)\s*(km/h|kph|kmph|mph|kilometres?\s+per\s+hour|kilometers?\s+per\s+hour|miles?\s+per\s+hour)\b", re.IGNORECASE)),
-    ("speed", re.compile(r"\b(?:doing|going|was\s+doing|going\s+at)\s+(\d+(?:\.\d+)?)\b", re.IGNORECASE)),
+    (
+        "speed",
+        re.compile(
+            r"\b(?:doing|going|travelling|traveling|moving)\s+(?:at\s+)?(?:about|approximately|around|roughly|at\s+least|over|under)?\s*(\d+(?:\.\d+)?)\s*(?:km/h|kph|kmph|kilometres?\s+per\s+hour|kilometers?\s+per\s+hour|mph|miles?\s+per\s+hour)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "speed",
+        re.compile(
+            r"\b(\d+(?:\.\d+)?)\s*(km/h|kph|kmph|mph|kilometres?\s+per\s+hour|kilometers?\s+per\s+hour|miles?\s+per\s+hour)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "speed",
+        re.compile(r"\b(?:doing|going|was\s+doing|going\s+at)\s+(\d+(?:\.\d+)?)\b", re.IGNORECASE),
+    ),
 ]
 _DIRECTION_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
-    ("direction", re.compile(r"\bturned\s+(left|right|sharply\s+left|sharply\s+right|around)\b", re.IGNORECASE)),
-    ("direction", re.compile(r"\bgoing\s+(north|south|east|west|straight|straight\s+ahead|forward)\b", re.IGNORECASE)),
+    (
+        "direction",
+        re.compile(
+            r"\bturned\s+(left|right|sharply\s+left|sharply\s+right|around)\b", re.IGNORECASE
+        ),
+    ),
+    (
+        "direction",
+        re.compile(
+            r"\bgoing\s+(north|south|east|west|straight|straight\s+ahead|forward)\b", re.IGNORECASE
+        ),
+    ),
     ("direction", re.compile(r"\bswerved\s+(left|right|to\s+avoid)?\b", re.IGNORECASE)),
-    ("direction", re.compile(r"\bmoving\s+(north|south|east|west|northbound|southbound|eastbound|westbound)\b", re.IGNORECASE)),
+    (
+        "direction",
+        re.compile(
+            r"\bmoving\s+(north|south|east|west|northbound|southbound|eastbound|westbound)\b",
+            re.IGNORECASE,
+        ),
+    ),
 ]
 _TIMING_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("timing", re.compile(r"\b(\d+(?:\.\d+)?)\s*seconds?\s+(before|after)\b", re.IGNORECASE)),
@@ -57,18 +91,43 @@ _POSITION_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("position", re.compile(r"\bon\s+the\s+pavement\b", re.IGNORECASE)),
     ("position", re.compile(r"\bat\s+the\s+junction\b", re.IGNORECASE)),
 ]
-ALL_PATTERN_GROUPS: list[list[tuple[str, re.Pattern[str]]]] = [_SPEED_PATTERNS, _DIRECTION_PATTERNS, _TIMING_PATTERNS, _ACTION_PATTERNS, _STOP_PATTERNS, _POSITION_PATTERNS]
-_UNIT_NORMALISE: dict[str, str] = {"kilometres per hour": "km/h", "kilometers per hour": "km/h", "kilometre per hour": "km/h", "kilometer per hour": "km/h", "kmph": "km/h", "kph": "km/h", "miles per hour": "mph", "mile per hour": "mph"}
-_QUALIFIER_RE = re.compile(r"\b(approximately|about|around|roughly|at\s+least|at\s+most|over|under|never|before|after|exactly)\b", re.IGNORECASE)
+ALL_PATTERN_GROUPS: list[list[tuple[str, re.Pattern[str]]]] = [
+    _SPEED_PATTERNS,
+    _DIRECTION_PATTERNS,
+    _TIMING_PATTERNS,
+    _ACTION_PATTERNS,
+    _STOP_PATTERNS,
+    _POSITION_PATTERNS,
+]
+_UNIT_NORMALISE: dict[str, str] = {
+    "kilometres per hour": "km/h",
+    "kilometers per hour": "km/h",
+    "kilometre per hour": "km/h",
+    "kilometer per hour": "km/h",
+    "kmph": "km/h",
+    "kph": "km/h",
+    "miles per hour": "mph",
+    "mile per hour": "mph",
+}
+_QUALIFIER_RE = re.compile(
+    r"\b(approximately|about|around|roughly|at\s+least|at\s+most|over|under|never|before|after|exactly)\b",
+    re.IGNORECASE,
+)
 _SENTENCE_RE = re.compile(r"[.!?]+(?:\s+|$)")
 _MIN_TEXT_LEN = 3
+
+
 def _normalise_unit(raw: str | None) -> str | None:
     if raw is None:
         return None
     return _UNIT_NORMALISE.get(raw.strip().lower(), raw.strip().lower())
+
+
 def _extract_qualifier(text: str) -> str | None:
     m = _QUALIFIER_RE.search(text)
     return m.group(1).lower() if m else None
+
+
 def _extract_speed_value(match: re.Match[str]) -> tuple[float | None, str | None]:
     raw_num: str | None = None
     raw_unit: str | None = None
@@ -93,6 +152,8 @@ def _extract_speed_value(match: re.Match[str]) -> tuple[float | None, str | None
             pass
     unit = _normalise_unit(raw_unit) if raw_unit else None
     return value, unit
+
+
 def _sentences(text: str) -> list[tuple[str, int, int]]:
     results: list[tuple[str, int, int]] = []
     parts = _SENTENCE_RE.split(text)
@@ -111,6 +172,8 @@ def _sentences(text: str) -> list[tuple[str, int, int]]:
     if not results and text.strip():
         results.append((text.strip(), 0, len(text.strip())))
     return results
+
+
 def _extract_subject(sentence: str) -> str:
     lower = sentence.lower()
     if "vehicle a" in lower or "vehicle-a" in lower:
@@ -130,6 +193,8 @@ def _extract_subject(sentence: str) -> str:
     if "bus" in lower:
         return "bus"
     return "unknown"
+
+
 def _compute_confidence(assertions: list[ClaimAssertion]) -> float:
     if not assertions:
         return 0.0
@@ -140,6 +205,8 @@ def _compute_confidence(assertions: list[ClaimAssertion]) -> float:
         if a.qualifier is not None:
             base += 0.05
     return min(0.95, round(base, 2))
+
+
 def extract_claims(
     transcript_text: str,
     case_id: str,
@@ -168,20 +235,20 @@ def extract_claims(
         # Timestamps are NOT inferred from character position — they are unknown.
         ts_start: float = 0.0
         ts_end: float = 0.0
-        _assertions = _extract_assertions_from_sentence(
-            sent_text, ts_start, ts_end, seen_spans
-        )
+        _assertions = _extract_assertions_from_sentence(sent_text, ts_start, ts_end, seen_spans)
         if _assertions:
-            claims.append(Claim(
-                id=str(uuid.uuid4()),
-                case_id=case_id,
-                media_id=media_id,
-                transcript_id=transcript_id,
-                speaker=speaker,
-                assertions=_assertions,
-                raw_text=sent_text,
-                confidence=_compute_confidence(_assertions),
-            ))
+            claims.append(
+                Claim(
+                    id=str(uuid.uuid4()),
+                    case_id=case_id,
+                    media_id=media_id,
+                    transcript_id=transcript_id,
+                    speaker=speaker,
+                    assertions=_assertions,
+                    raw_text=sent_text,
+                    confidence=_compute_confidence(_assertions),
+                )
+            )
     return claims
 
 
@@ -213,20 +280,20 @@ def extract_claims_from_segments(
         ts_end = float(seg.get("end", 0.0))
 
         for sent_text, _, _ in _sentences(text):
-            _assertions = _extract_assertions_from_sentence(
-                sent_text, ts_start, ts_end, seen_spans
-            )
+            _assertions = _extract_assertions_from_sentence(sent_text, ts_start, ts_end, seen_spans)
             if _assertions:
-                claims.append(Claim(
-                    id=str(uuid.uuid4()),
-                    case_id=case_id,
-                    media_id=media_id,
-                    transcript_id=transcript_id,
-                    speaker=speaker,
-                    assertions=_assertions,
-                    raw_text=sent_text,
-                    confidence=_compute_confidence(_assertions),
-                ))
+                claims.append(
+                    Claim(
+                        id=str(uuid.uuid4()),
+                        case_id=case_id,
+                        media_id=media_id,
+                        transcript_id=transcript_id,
+                        speaker=speaker,
+                        assertions=_assertions,
+                        raw_text=sent_text,
+                        confidence=_compute_confidence(_assertions),
+                    )
+                )
     return claims
 
 
@@ -291,17 +358,19 @@ def _extract_assertions_from_sentence(
                 if _overlap:
                     continue
 
-                assertions.append(ClaimAssertion(
-                    assertion_type=assertion_type,
-                    subject=subject,
-                    value=value,
-                    unit=unit,
-                    qualifier=qualifier,
-                    raw_text=raw_excerpt,
-                    # Use the segment timestamps directly — no interpolation
-                    source_ts_start=round(ts_start, 3),
-                    source_ts_end=round(ts_end, 3),
-                ))
+                assertions.append(
+                    ClaimAssertion(
+                        assertion_type=assertion_type,
+                        subject=subject,
+                        value=value,
+                        unit=unit,
+                        qualifier=qualifier,
+                        raw_text=raw_excerpt,
+                        # Use the segment timestamps directly — no interpolation
+                        source_ts_start=round(ts_start, 3),
+                        source_ts_end=round(ts_end, 3),
+                    )
+                )
                 seen_spans.add(key)
 
     # Final dedup on raw text

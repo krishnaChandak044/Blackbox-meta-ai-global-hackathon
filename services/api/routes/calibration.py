@@ -23,11 +23,11 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from engine.geometry.homography import (
+    MAX_ACCEPTABLE_CONDITION_NUMBER,
+    MAX_ACCEPTABLE_REPROJECTION_RMSE_PX,
     MIN_ANCHORS,
     PixelPoint,
     WorldPoint,
-    MAX_ACCEPTABLE_CONDITION_NUMBER,
-    MAX_ACCEPTABLE_REPROJECTION_RMSE_PX,
     estimate_homography,
     homography_fit_is_usable,
     reprojection_errors_px,
@@ -145,8 +145,15 @@ async def add_anchor(
     numeric_values = (payload.pixel_x, payload.pixel_y, payload.world_x, payload.world_y)
     if not all(math.isfinite(value) for value in numeric_values):
         raise HTTPException(status_code=422, detail="Anchor coordinates must be finite numbers")
-    if media.width and payload.pixel_x > media.width or media.height and payload.pixel_y > media.height:
-        raise HTTPException(status_code=422, detail="Selected image point is outside the source video frame")
+    if (
+        media.width
+        and payload.pixel_x > media.width
+        or media.height
+        and payload.pixel_y > media.height
+    ):
+        raise HTTPException(
+            status_code=422, detail="Selected image point is outside the source video frame"
+        )
 
     anchor = CalibrationAnchor(
         id=str(uuid.uuid4()),
@@ -276,10 +283,17 @@ async def fit_homography(
     try:
         for anchor in validation_anchors:
             predicted = hom.world_to_pixel(WorldPoint(x=anchor.world_x, y=anchor.world_y))
-            validation_errors.append(math.hypot(predicted.x - anchor.pixel_x, predicted.y - anchor.pixel_y))
+            validation_errors.append(
+                math.hypot(predicted.x - anchor.pixel_x, predicted.y - anchor.pixel_y)
+            )
     except Exception as exc:
-        raise HTTPException(status_code=422, detail="calibration_quality_rejected: validation points could not be projected") from exc
-    validation_rmse = math.sqrt(sum(error * error for error in validation_errors) / len(validation_errors))
+        raise HTTPException(
+            status_code=422,
+            detail="calibration_quality_rejected: validation points could not be projected",
+        ) from exc
+    validation_rmse = math.sqrt(
+        sum(error * error for error in validation_errors) / len(validation_errors)
+    )
     if not math.isfinite(validation_rmse) or validation_rmse > MAX_ACCEPTABLE_REPROJECTION_RMSE_PX:
         raise HTTPException(
             status_code=422,
@@ -289,7 +303,10 @@ async def fit_homography(
                 "Check the measured coordinates and click the same physical road points in the video."
             ),
         )
-    if not math.isfinite(hom.condition_number) or hom.condition_number > MAX_ACCEPTABLE_CONDITION_NUMBER:
+    if (
+        not math.isfinite(hom.condition_number)
+        or hom.condition_number > MAX_ACCEPTABLE_CONDITION_NUMBER
+    ):
         raise HTTPException(
             status_code=422,
             detail=(

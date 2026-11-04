@@ -21,31 +21,48 @@ import math
 import re
 from datetime import datetime, timezone
 
-from engine.claims.models import Claim, ClaimAssertion, ClaimVerdict, TrackDetailLite, TrackPointLite
+from engine.claims.models import (
+    Claim,
+    ClaimAssertion,
+    ClaimVerdict,
+    TrackDetailLite,
+    TrackPointLite,
+)
 
 # ── Tunable thresholds ────────────────────────────────────────────────────────
-SPEED_SUPPORT_TOL = 0.20    # ±20% → supported
+SPEED_SUPPORT_TOL = 0.20  # ±20% → supported
 SPEED_CONTRADICT_TOL = 0.40  # >40% → contradicted; between = inconclusive
 STOP_MIN_DURATION_S = 0.5
-DIRECTION_TOL_DEG = 45.0    # ±45° of claimed compass bearing
+DIRECTION_TOL_DEG = 45.0  # ±45° of claimed compass bearing
 
 # Minimum number of consecutive world-point pairs to trust a speed estimate
 MIN_SPEED_PAIRS = 2
 
 DIRECTION_BEARINGS: dict[str, float] = {
-    "north": 0.0, "northbound": 0.0,
-    "south": 180.0, "southbound": 180.0,
-    "east": 90.0, "eastbound": 90.0,
-    "west": 270.0, "westbound": 270.0,
-    "straight": 0.0, "forward": 0.0, "straight ahead": 0.0,
-    "north-east": 45.0, "northeast": 45.0,
-    "south-east": 135.0, "southeast": 135.0,
-    "south-west": 225.0, "southwest": 225.0,
-    "north-west": 315.0, "northwest": 315.0,
+    "north": 0.0,
+    "northbound": 0.0,
+    "south": 180.0,
+    "southbound": 180.0,
+    "east": 90.0,
+    "eastbound": 90.0,
+    "west": 270.0,
+    "westbound": 270.0,
+    "straight": 0.0,
+    "forward": 0.0,
+    "straight ahead": 0.0,
+    "north-east": 45.0,
+    "northeast": 45.0,
+    "south-east": 135.0,
+    "southeast": 135.0,
+    "south-west": 225.0,
+    "southwest": 225.0,
+    "north-west": 315.0,
+    "northwest": 315.0,
 }
 
 
 # ── Unit conversion ───────────────────────────────────────────────────────────
+
 
 def _to_kmh(value: float, unit: str | None) -> float:
     """Convert a claimed speed value to km/h for comparison."""
@@ -62,6 +79,7 @@ def _to_kmh(value: float, unit: str | None) -> float:
 
 
 # ── Time-window filtering ─────────────────────────────────────────────────────
+
 
 def _filter_by_window(
     points: list[TrackPointLite],
@@ -80,6 +98,7 @@ def _filter_by_window(
 
 
 # ── Per-vehicle speed computation ─────────────────────────────────────────────
+
 
 def _speed_for_single_track(
     points: list[TrackPointLite],
@@ -148,6 +167,7 @@ def _best_speed_estimate(
 
 # ── Bearing helpers ───────────────────────────────────────────────────────────
 
+
 def _angular_diff(a: float, b: float) -> float:
     d = abs(a - b) % 360
     return min(d, 360 - d)
@@ -184,12 +204,14 @@ def _bearing_from_track(
 
 # ── Evidence confidence ───────────────────────────────────────────────────────
 
+
 def _data_coverage(n_pairs: int, expected_pairs: int = 15) -> float:
     """Evidence coverage score; this is not a probability of verdict correctness."""
     return min(1.0, max(0.0, n_pairs / expected_pairs))
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────
+
 
 def check_claim(
     claim: Claim,
@@ -230,8 +252,7 @@ def check_claim(
             evidence_frame_end=None,
             evidence_world_positions=None,
             explanation=(
-                "No object tracks found for this media clip. "
-                "Run tracking before checking claims."
+                "No object tracks found for this media clip. Run tracking before checking claims."
             ),
             checked_at=now,
         )
@@ -309,7 +330,9 @@ def check_claim(
         selected_track = next((t for t in tracks if t.id == track_id), None)
         n_pairs = 0
         if selected_track:
-            window_pts = _filter_by_window(selected_track.points, primary.source_ts_start, primary.source_ts_end)
+            window_pts = _filter_by_window(
+                selected_track.points, primary.source_ts_start, primary.source_ts_end
+            )
             pts_used = window_pts if window_pts else selected_track.points
             world_in_window = [p for p in pts_used if p.world_x is not None]
             n_pairs = max(0, len(world_in_window) - 1)
@@ -377,7 +400,9 @@ def check_claim(
                 checked_at=now,
             )
 
-        window_pts = _filter_by_window(best_track.points, primary.source_ts_start, primary.source_ts_end)
+        window_pts = _filter_by_window(
+            best_track.points, primary.source_ts_start, primary.source_ts_end
+        )
         pts = window_pts if window_pts else best_track.points
         world_pts = sorted(
             [p for p in pts if p.world_x is not None and p.world_y is not None],
@@ -433,8 +458,8 @@ def check_claim(
                 evidence_frame_end=f1,
                 evidence_world_positions=wpos,
                 explanation=(
-                f"Stop claim is supported by a low-speed interval lasting "
-                f"{max(stop_intervals):.2f} seconds (minimum {STOP_MIN_DURATION_S:.2f} seconds)."
+                    f"Stop claim is supported by a low-speed interval lasting "
+                    f"{max(stop_intervals):.2f} seconds (minimum {STOP_MIN_DURATION_S:.2f} seconds)."
                 ),
                 checked_at=now,
             )
@@ -447,7 +472,7 @@ def check_claim(
                 evidence_frame_end=f1,
                 evidence_world_positions=wpos,
                 explanation=(
-                f"No low-speed interval of at least {STOP_MIN_DURATION_S:.2f} seconds was observed in the available window."
+                    f"No low-speed interval of at least {STOP_MIN_DURATION_S:.2f} seconds was observed in the available window."
                 ),
                 checked_at=now,
             )

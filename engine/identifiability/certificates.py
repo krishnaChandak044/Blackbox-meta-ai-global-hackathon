@@ -69,9 +69,12 @@ def certify_quantities(
         )
     elif not enough_obs:
         certs["entry_speed"] = IdentifiabilityCertificate(
-            quantity="entry_speed", status="conditional", interval_type="illustrative_range",
+            quantity="entry_speed",
+            status="conditional",
+            interval_type="illustrative_range",
             condition="at least 8 observations are needed for the current fit policy",
-            reason=f"Only {n_obs} observations are available.", limiting_source="model_assumption",
+            reason=f"Only {n_obs} observations are available.",
+            limiting_source="model_assumption",
             improving_observation="Add more timestamped, calibrated track observations",
         )
     elif not fit_ok:
@@ -81,7 +84,7 @@ def certify_quantities(
             interval_type="illustrative_range",
             condition="fit_quality: reduced_chi_squared > 10 or did not converge",
             reason=f"Fit quality poor: χ²_r={fit_quality.reduced_chi_squared:.2f}, "
-                   f"converged={fit_quality.converged}",
+            f"converged={fit_quality.converged}",
             limiting_source="model_assumption",
             improving_observation="More track observations or a refined motion model",
         )
@@ -113,15 +116,19 @@ def certify_quantities(
             interval_type="not_available",
             condition=None,
             reason="Single-segment fit selected; no supported deceleration change-point detected. "
-                   "Cannot infer deceleration from a trajectory consistent with constant acceleration.",
+            "Cannot infer deceleration from a trajectory consistent with constant acceleration.",
             limiting_source="model_assumption",
             improving_observation="Track spanning visible braking event with ≥10 observations",
         )
     elif not braking_onset_supported:
         certs["mean_deceleration"] = IdentifiabilityCertificate(
-            quantity="mean_deceleration", status="not_identifiable", interval_type="not_available",
-            condition=None, reason="No deceleration change-point passed the current fit policy.",
-            limiting_source="model_assumption", improving_observation="Record a longer track spanning visible slowing",
+            quantity="mean_deceleration",
+            status="not_identifiable",
+            interval_type="not_available",
+            condition=None,
+            reason="No deceleration change-point passed the current fit policy.",
+            limiting_source="model_assumption",
+            improving_observation="Record a longer track spanning visible slowing",
         )
     elif not fit_ok or not enough_obs:
         certs["mean_deceleration"] = IdentifiabilityCertificate(
@@ -167,8 +174,10 @@ def certify_quantities(
         )
 
     # ── Stopping distance ────────────────────────────────────────────────────
-    if certs["entry_speed"].status == "not_identifiable" or \
-       certs["mean_deceleration"].status == "not_identifiable":
+    if (
+        certs["entry_speed"].status == "not_identifiable"
+        or certs["mean_deceleration"].status == "not_identifiable"
+    ):
         certs["stopping_distance"] = IdentifiabilityCertificate(
             quantity="stopping_distance",
             status="not_identifiable",

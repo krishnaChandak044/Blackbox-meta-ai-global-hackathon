@@ -15,13 +15,18 @@ from __future__ import annotations
 
 import json
 import logging
-import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import select
 
 from engine.claims.extractor import extract_claims, extract_claims_from_segments
-from services.api.db.models import JobStatus, ProcessingJob, ProcessingLog, Transcript, TranscriptClaim
+from services.api.db.models import (
+    JobStatus,
+    ProcessingJob,
+    ProcessingLog,
+    Transcript,
+    TranscriptClaim,
+)
 from services.worker.celery_app import app as celery_app
 from services.worker.db import get_sync_session
 
@@ -74,26 +79,30 @@ def _run(db, transcript_id: str, job: ProcessingJob) -> dict:
             "extract_claims.blocked_synthetic",
             extra={"transcript_id": transcript_id},
         )
-        db.add(ProcessingLog(
-            case_id=tr.case_id,
-            media_id=tr.media_id,
-            stage="claim_check",
-            tool_name="claim-extractor-v1",
-            tool_version="0.2.0",
-            operator="system",
-            notes=(
-                f"Claim extraction BLOCKED for transcript {transcript_id}: "
-                "transcript is synthetic (is_synthetic=True). "
-                "No claims were created — synthetic text must not be treated as witness evidence."
-            ),
-        ))
+        db.add(
+            ProcessingLog(
+                case_id=tr.case_id,
+                media_id=tr.media_id,
+                stage="claim_check",
+                tool_name="claim-extractor-v1",
+                tool_version="0.2.0",
+                operator="system",
+                notes=(
+                    f"Claim extraction BLOCKED for transcript {transcript_id}: "
+                    "transcript is synthetic (is_synthetic=True). "
+                    "No claims were created — synthetic text must not be treated as witness evidence."
+                ),
+            )
+        )
         db.commit()
         return {"claim_count": 0, "transcript_id": transcript_id, "blocked": "synthetic"}
 
     # ── Idempotent: delete old claims for this transcript first ───────────────
-    existing = db.execute(
-        select(TranscriptClaim).where(TranscriptClaim.transcript_id == transcript_id)
-    ).scalars().all()
+    existing = (
+        db.execute(select(TranscriptClaim).where(TranscriptClaim.transcript_id == transcript_id))
+        .scalars()
+        .all()
+    )
     for old in existing:
         db.delete(old)
     db.flush()
@@ -154,14 +163,16 @@ def _run(db, transcript_id: str, job: ProcessingJob) -> dict:
         )
         db.add(row)
 
-    db.add(ProcessingLog(
-        case_id=tr.case_id,
-        media_id=tr.media_id,
-        stage="claim_check",
-        tool_name="claim-extractor-v1",
-        tool_version="0.2.0",
-        operator="system",
-        notes=f"Extracted {len(claims)} claims from transcript {transcript_id}.",
-    ))
+    db.add(
+        ProcessingLog(
+            case_id=tr.case_id,
+            media_id=tr.media_id,
+            stage="claim_check",
+            tool_name="claim-extractor-v1",
+            tool_version="0.2.0",
+            operator="system",
+            notes=f"Extracted {len(claims)} claims from transcript {transcript_id}.",
+        )
+    )
     db.commit()
     return {"claim_count": len(claims), "transcript_id": transcript_id}

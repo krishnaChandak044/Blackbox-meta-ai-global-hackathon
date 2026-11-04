@@ -14,39 +14,47 @@ import json
 import math
 import subprocess
 import uuid
-from dataclasses import asdict
-from datetime import datetime, timezone
-from typing import Any
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from services.api.auth.session import current_user
-from services.api.db.models import (
-    DynamicsRun, HomographyFit, JobStatus, JobStage,
-    ObjectTrack, ProcessingJob, SourceMedia, TrackPointRow,
-)
-from services.api.db.session import get_db
 from engine.geometry.homography import (
-    MIN_ANCHORS,
     MAX_ACCEPTABLE_CONDITION_NUMBER,
     MAX_ACCEPTABLE_REPROJECTION_RMSE_PX,
+    MIN_ANCHORS,
 )
+from services.api.auth.session import current_user
+from services.api.db.models import (
+    DynamicsRun,
+    HomographyFit,
+    JobStage,
+    JobStatus,
+    ObjectTrack,
+    ProcessingJob,
+    SourceMedia,
+    TrackPointRow,
+)
+from services.api.db.session import get_db
 
 router = APIRouter(prefix="/cases/{case_id}/media/{media_id}", tags=["dynamics"])
 
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────────
 
+
 class DynamicsParams(BaseModel):
     """User-declared parameters for the dynamics inference job."""
+
     track_id: str
     calibration_fit_id: str
     seed: int = 42
     max_speed_ms: float = Field(50.0, ge=1.0, le=200.0, description="Upper bound on speed (m/s)")
-    max_accel_ms2: float = Field(15.0, ge=0.1, le=50.0, description="Upper bound on |acceleration| (m/s²)")
+    max_accel_ms2: float = Field(
+        15.0, ge=0.1, le=50.0, description="Upper bound on |acceleration| (m/s²)"
+    )
     try_two_segment: bool = True
 
 
@@ -76,7 +84,9 @@ class DynamicsRunStatus(BaseModel):
     created_at: datetime
     completed_at: datetime | None
 
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 async def _require_case_media(case_id: str, media_id: str, db: AsyncSession) -> SourceMedia:
     media = await db.get(SourceMedia, media_id)
@@ -87,24 +97,37 @@ async def _require_case_media(case_id: str, media_id: str, db: AsyncSession) -> 
 
 def _git_rev() -> str:
     try:
-        return subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL
-        ).decode().strip()
+        return (
+            subprocess.check_output(
+                ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL
+            )
+            .decode()
+            .strip()
+        )
     except Exception:
         return "unknown"
 
 
 def _hash_track_points(points) -> str:
     blob = json.dumps(
-        [{"fi": p.frame_index, "x": p.world_x, "y": p.world_y,
-          "ts": p.presentation_ts_s, "sigma": p.pixel_localisation_sigma_m}
-         for p in points],
-        sort_keys=True, separators=(",", ":"),
+        [
+            {
+                "fi": p.frame_index,
+                "x": p.world_x,
+                "y": p.world_y,
+                "ts": p.presentation_ts_s,
+                "sigma": p.pixel_localisation_sigma_m,
+            }
+            for p in points
+        ],
+        sort_keys=True,
+        separators=(",", ":"),
     ).encode()
     return hashlib.sha256(blob).hexdigest()[:16]
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
+
 
 @router.post("/dynamics", status_code=202)
 async def queue_dynamics(
@@ -145,7 +168,10 @@ async def queue_dynamics(
     if len(pts) < 5:
         raise HTTPException(422, f"insufficient_observations: need ≥5, got {len(pts)}")
     if any(p.pixel_localisation_sigma_m is None or p.pixel_localisation_sigma_m <= 0 for p in pts):
-        raise HTTPException(422, "localisation_uncertainty_missing: rerun tracking to store pixel-localisation uncertainty")
+        raise HTTPException(
+            422,
+            "localisation_uncertainty_missing: rerun tracking to store pixel-localisation uncertainty",
+        )
 
     track_version_hash = _hash_track_points(pts)
 
@@ -159,8 +185,7 @@ async def queue_dynamics(
     if (
         hf.anchor_count < MIN_ANCHORS + 1
         or hf.validation_anchor_count < 1
-        or
-        hf.reprojection_rmse_px is None
+        or hf.reprojection_rmse_px is None
         or not math.isfinite(hf.reprojection_rmse_px)
         or hf.reprojection_rmse_px > MAX_ACCEPTABLE_REPROJECTION_RMSE_PX
     ):
@@ -173,7 +198,9 @@ async def queue_dynamics(
         or not math.isfinite(hf.condition_number)
         or hf.condition_number > MAX_ACCEPTABLE_CONDITION_NUMBER
     ):
-        raise HTTPException(422, "calibration_quality_rejected: ground-plane points are geometrically unstable")
+        raise HTTPException(
+            422, "calibration_quality_rejected: ground-plane points are geometrically unstable"
+        )
     if not math.isfinite(hf.scale_relative_error) or hf.scale_relative_error > 0.10:
         raise HTTPException(422, "calibration_quality_rejected: measured scale error exceeds 10%")
     if media.sha256 is None:
@@ -190,22 +217,29 @@ async def queue_dynamics(
 
     software_revision = _git_rev()
     params_json = json.dumps(params_dict, sort_keys=True, default=str)
-    provenance = json.dumps({
-        "track_id": payload.track_id,
-        "track_version_hash": track_version_hash,
-        "calibration_fit_id": hf.id,
-        "media_sha256": media.sha256,
-        "model": "piecewise_const_accel_2d_v1",
-        "model_version": "1.0.0",
-        "software_revision": software_revision,
-        "seed": payload.seed,
-        "params": params_json,
-    }, sort_keys=True).encode()
+    provenance = json.dumps(
+        {
+            "track_id": payload.track_id,
+            "track_version_hash": track_version_hash,
+            "calibration_fit_id": hf.id,
+            "media_sha256": media.sha256,
+            "model": "piecewise_const_accel_2d_v1",
+            "model_version": "1.0.0",
+            "software_revision": software_revision,
+            "seed": payload.seed,
+            "params": params_json,
+        },
+        sort_keys=True,
+    ).encode()
     stable_run_id = hashlib.sha256(provenance).hexdigest()[:36]
     existing = await db.get(DynamicsRun, stable_run_id)
     if existing is not None:
         if existing.job_id:
-            return {"dynamics_run_id": existing.id, "job_id": existing.job_id, "status": existing.status}
+            return {
+                "dynamics_run_id": existing.id,
+                "job_id": existing.job_id,
+                "status": existing.status,
+            }
         raise HTTPException(409, "An identical dynamics run already exists without a linked job")
 
     dr = DynamicsRun(
@@ -241,7 +275,9 @@ async def queue_dynamics(
     # Dispatch Celery task AFTER commit (no race condition)
     try:
         import asyncio
+
         from services.worker.jobs.dynamics import run_dynamics_task
+
         await asyncio.to_thread(run_dynamics_task.delay, dr.id, job.id)
     except Exception as exc:
         job.status = JobStatus.FAILED
@@ -280,14 +316,16 @@ async def get_dynamics(
 
     # Surface stale runs when track inputs or the active calibration changed.
     pts_result = await db.execute(
-        select(TrackPointRow).where(TrackPointRow.track_id == dr.track_id)
+        select(TrackPointRow)
+        .where(TrackPointRow.track_id == dr.track_id)
         .order_by(TrackPointRow.presentation_ts_s)
     )
     pts = pts_result.scalars().all()
     current_fit = await db.execute(
-        select(HomographyFit).where(
-            HomographyFit.media_id == media_id, HomographyFit.is_active.is_(True)
-        ).order_by(HomographyFit.fitted_at.desc()).limit(1)
+        select(HomographyFit)
+        .where(HomographyFit.media_id == media_id, HomographyFit.is_active.is_(True))
+        .order_by(HomographyFit.fitted_at.desc())
+        .limit(1)
     )
     current_fit_row = current_fit.scalar_one_or_none()
     active_fit_id = None

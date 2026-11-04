@@ -43,8 +43,16 @@ async def create_case(
 
 @router.get("/", response_model=list[CaseResponse])
 async def list_cases(db: AsyncSession = Depends(get_db)) -> list[CaseResponse]:
-    counts = select(SourceMedia.case_id, func.count().label("media_count")).group_by(SourceMedia.case_id).subquery()
-    result = await db.execute(select(Case, func.coalesce(counts.c.media_count, 0)).outerjoin(counts, Case.id == counts.c.case_id).order_by(Case.created_at.desc()))
+    counts = (
+        select(SourceMedia.case_id, func.count().label("media_count"))
+        .group_by(SourceMedia.case_id)
+        .subquery()
+    )
+    result = await db.execute(
+        select(Case, func.coalesce(counts.c.media_count, 0))
+        .outerjoin(counts, Case.id == counts.c.case_id)
+        .order_by(Case.created_at.desc())
+    )
 
     responses = []
     for case, media_count in result.all():

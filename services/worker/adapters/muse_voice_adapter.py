@@ -18,7 +18,7 @@ import os
 import pathlib
 import subprocess
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import httpx
 
@@ -53,12 +53,17 @@ def extract_audio(video_path: str, dest_path: str) -> None:
     try:
         result = subprocess.run(
             [
-                "ffmpeg", "-y",
-                "-i", video_path,
-                "-vn",                  # no video
-                "-ac", "1",             # mono
-                "-ar", "16000",         # 16 kHz — standard for speech models
-                "-acodec", "pcm_s16le", # WAV PCM
+                "ffmpeg",
+                "-y",
+                "-i",
+                video_path,
+                "-vn",  # no video
+                "-ac",
+                "1",  # mono
+                "-ar",
+                "16000",  # 16 kHz — standard for speech models
+                "-acodec",
+                "pcm_s16le",  # WAV PCM
                 dest_path,
             ],
             capture_output=True,
@@ -69,7 +74,9 @@ def extract_audio(video_path: str, dest_path: str) -> None:
             stderr = result.stderr.decode(errors="replace")
             raise RuntimeError(f"ffmpeg failed (rc={result.returncode}): {stderr[:500]}")
     except FileNotFoundError as exc:
-        raise AdapterUnavailable("ffmpeg not found on PATH — cannot extract audio from video") from exc
+        raise AdapterUnavailable(
+            "ffmpeg not found on PATH — cannot extract audio from video"
+        ) from exc
 
 
 class MuseVoiceAdapter:
@@ -131,7 +138,9 @@ class MuseVoiceAdapter:
             if needs_extraction:
                 tmp_wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
                 tmp_wav.close()
-                logger.info("muse_voice.extracting_audio", extra={"src": str(src), "dst": tmp_wav.name})
+                logger.info(
+                    "muse_voice.extracting_audio", extra={"src": str(src), "dst": tmp_wav.name}
+                )
                 extract_audio(str(src), tmp_wav.name)
                 audio_path = tmp_wav.name
             else:
@@ -148,23 +157,37 @@ class MuseVoiceAdapter:
         try:
             with open(audio_path, "rb") as fh:
                 suffix = pathlib.Path(audio_path).suffix.lower()
-                content_type = "audio/wav" if suffix == ".wav" else {
-                    ".mp3": "audio/mpeg", ".flac": "audio/flac", ".ogg": "audio/ogg",
-                    ".m4a": "audio/mp4", ".aac": "audio/aac", ".opus": "audio/opus",
-                }.get(suffix)
+                content_type = (
+                    "audio/wav"
+                    if suffix == ".wav"
+                    else {
+                        ".mp3": "audio/mpeg",
+                        ".flac": "audio/flac",
+                        ".ogg": "audio/ogg",
+                        ".m4a": "audio/mp4",
+                        ".aac": "audio/aac",
+                        ".opus": "audio/opus",
+                    }.get(suffix)
+                )
                 if suffix != ".wav" or content_type != "audio/wav":
-                    raise AdapterUnavailable("Muse Voice API requires mono 16-bit WAV at 16 or 24 kHz")
+                    raise AdapterUnavailable(
+                        "Muse Voice API requires mono 16-bit WAV at 16 or 24 kHz"
+                    )
                 if pathlib.Path(audio_path).stat().st_size > 32 * 1024 * 1024:
                     raise AdapterUnavailable("Muse Voice API file limit is 32 MB")
                 files = {
-                    "request": (None, '{"model":"muse-voice-transcribe-1.0","audioEncoding":"WAV","mode":"DIARIZATION"}', "application/json"),
+                    "request": (
+                        None,
+                        '{"model":"muse-voice-transcribe-1.0","audioEncoding":"WAV","mode":"DIARIZATION"}',
+                        "application/json",
+                    ),
                     "audio": (pathlib.Path(audio_path).name, fh, content_type),
                 }
                 resp = httpx.post(
                     self._endpoint(self.api_url),
                     files=files,
                     headers=headers,
-                    timeout=300.0,   # large files can take time
+                    timeout=300.0,  # large files can take time
                 )
                 resp.raise_for_status()
                 data = resp.json()
@@ -179,16 +202,20 @@ class MuseVoiceAdapter:
         if not isinstance(data, dict):
             raise AdapterUnavailable(f"Unexpected API response type: {type(data)}")
 
-        raw_turns: list[dict] = data.get("turns") or data.get("segments") or data.get("diarised") or []
+        raw_turns: list[dict] = (
+            data.get("turns") or data.get("segments") or data.get("diarised") or []
+        )
         segments = []
         for turn in raw_turns:
             if isinstance(turn, dict) and ("startMs" in turn or "endMs" in turn):
-                segments.append({
-                    "speaker": turn.get("speaker") or "unknown",
-                    "start": float(turn.get("startMs", 0)) / 1000.0,
-                    "end": float(turn.get("endMs", 0)) / 1000.0,
-                    "text": turn.get("transcript", turn.get("text", "")),
-                })
+                segments.append(
+                    {
+                        "speaker": turn.get("speaker") or "unknown",
+                        "start": float(turn.get("startMs", 0)) / 1000.0,
+                        "end": float(turn.get("endMs", 0)) / 1000.0,
+                        "text": turn.get("transcript", turn.get("text", "")),
+                    }
+                )
             else:
                 segments.append(turn)
         if not isinstance(segments, list) or any(not isinstance(s, dict) for s in segments):
@@ -206,9 +233,11 @@ class MuseVoiceAdapter:
             raw_text=raw_text,
             language=data.get("language", "und"),
             diarised_segments=self._normalise_segments(segments),
-            duration_seconds=(data.get("audioDurationMs") / 1000.0
-                              if data.get("audioDurationMs") is not None
-                              else data.get("duration_seconds")),
+            duration_seconds=(
+                data.get("audioDurationMs") / 1000.0
+                if data.get("audioDurationMs") is not None
+                else data.get("duration_seconds")
+            ),
             transcription_model=self.TRANSCRIPTION_MODEL,
             is_synthetic=False,
         )
@@ -228,16 +257,13 @@ class MuseVoiceAdapter:
                 raise AdapterUnavailable("Muse Voice returned invalid segment timestamps") from exc
             if start < 0 or end < start:
                 raise AdapterUnavailable("Muse Voice returned an invalid segment time range")
-            speaker = (
-                s.get("speaker")
-                or s.get("speaker_label")
-                or s.get("spk")
-                or "unknown"
+            speaker = s.get("speaker") or s.get("speaker_label") or s.get("spk") or "unknown"
+            out.append(
+                {
+                    "speaker": str(speaker),
+                    "start": start,
+                    "end": end,
+                    "text": str(s.get("text", s.get("content", ""))).strip(),
+                }
             )
-            out.append({
-                "speaker": str(speaker),
-                "start": start,
-                "end": end,
-                "text": str(s.get("text", s.get("content", ""))).strip(),
-            })
         return out

@@ -315,11 +315,19 @@ async def delete_media(case_id: str, media_id: str, db: AsyncSession = Depends(g
     derived_paths = [Path(artifact.storage_path) for artifact in artifact_result.scalars().all()]
     await db.delete(media)
     await db.flush()
-    remaining = (await db.execute(select(SourceMedia.status).where(SourceMedia.case_id == case_id))).scalars().all()
+    remaining = (
+        (await db.execute(select(SourceMedia.status).where(SourceMedia.case_id == case_id)))
+        .scalars()
+        .all()
+    )
     case = await _get_case_or_404(case_id, db)
-    case.status = (CaseStatus.DRAFT if not remaining else
-                   CaseStatus.READY if all(item == MediaStatus.INDEXED for item in remaining) else
-                   CaseStatus.PROCESSING)
+    case.status = (
+        CaseStatus.DRAFT
+        if not remaining
+        else CaseStatus.READY
+        if all(item == MediaStatus.INDEXED for item in remaining)
+        else CaseStatus.PROCESSING
+    )
     await db.commit()
     original_path.unlink(missing_ok=True)
     for path in derived_paths:

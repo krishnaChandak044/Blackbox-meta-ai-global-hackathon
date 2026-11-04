@@ -1,4 +1,5 @@
 """Focused Phase 5 backend contract tests; no live services or external models."""
+
 from __future__ import annotations
 
 import hashlib
@@ -29,23 +30,94 @@ from services.worker.jobs.export import _build
 
 def test_scene_contract_preserves_2d_coordinates_and_labels_generated_paths():
     payload = build_scene_payload(
-        case_id="case-1", media_id="media-1", media_sha256="abc",
+        case_id="case-1",
+        media_id="media-1",
+        media_sha256="abc",
         calibration={"id": "fit-1"},
-        tracks=[{"track_id": "track-1", "category": "vehicle", "is_human_confirmed": True,
-                 "points": [{"frame_index": 7, "presentation_ts_s": 0.7,
-                             "world_x_m": 12.5, "world_y_m": -2.0, "sigma_m": 0.3}]}],
-        dynamics_runs=[{"id": "run-1", "interval_type": "illustrative_range",
-                        "fitted_points_json": json.dumps([{"frame_index": 7, "presentation_ts_s": 0.7,
-                            "world_x_m": 12.5, "world_y_m": -2.0, "pos_sigma_x_m": 0.4, "pos_sigma_y_m": 0.5}])}],
-        counterfactuals=[{"id": "cf-1", "baseline_run_id": "run-1",
-            "simulated_points_json": json.dumps([{"frame_index": 7, "presentation_ts_s": 0.7,
-                "world_x_m": 13.0, "world_y_m": -2.0}])}],
-        rivals=[{"id": "rival-1", "manifest_json": "{}", "rivals_json": json.dumps([
-            {"rank": 1, "params": {"entry_speed_kmh": 20.0, "deceleration_ms2": 4.0,
-                                     "braking_onset_s": 0.0}, "residual": 0.2,
-             "disambiguation_status": "unresolved"}]), "track_observations": [
-                 {"frame_index": 7, "presentation_ts_s": 0.7, "world_x_m": 12.5, "world_y_m": -2.0},
-                 {"frame_index": 9, "presentation_ts_s": 1.0, "world_x_m": 13.0, "world_y_m": -2.0}]}],
+        tracks=[
+            {
+                "track_id": "track-1",
+                "category": "vehicle",
+                "is_human_confirmed": True,
+                "points": [
+                    {
+                        "frame_index": 7,
+                        "presentation_ts_s": 0.7,
+                        "world_x_m": 12.5,
+                        "world_y_m": -2.0,
+                        "sigma_m": 0.3,
+                    }
+                ],
+            }
+        ],
+        dynamics_runs=[
+            {
+                "id": "run-1",
+                "interval_type": "illustrative_range",
+                "fitted_points_json": json.dumps(
+                    [
+                        {
+                            "frame_index": 7,
+                            "presentation_ts_s": 0.7,
+                            "world_x_m": 12.5,
+                            "world_y_m": -2.0,
+                            "pos_sigma_x_m": 0.4,
+                            "pos_sigma_y_m": 0.5,
+                        }
+                    ]
+                ),
+            }
+        ],
+        counterfactuals=[
+            {
+                "id": "cf-1",
+                "baseline_run_id": "run-1",
+                "simulated_points_json": json.dumps(
+                    [
+                        {
+                            "frame_index": 7,
+                            "presentation_ts_s": 0.7,
+                            "world_x_m": 13.0,
+                            "world_y_m": -2.0,
+                        }
+                    ]
+                ),
+            }
+        ],
+        rivals=[
+            {
+                "id": "rival-1",
+                "manifest_json": "{}",
+                "rivals_json": json.dumps(
+                    [
+                        {
+                            "rank": 1,
+                            "params": {
+                                "entry_speed_kmh": 20.0,
+                                "deceleration_ms2": 4.0,
+                                "braking_onset_s": 0.0,
+                            },
+                            "residual": 0.2,
+                            "disambiguation_status": "unresolved",
+                        }
+                    ]
+                ),
+                "track_observations": [
+                    {
+                        "frame_index": 7,
+                        "presentation_ts_s": 0.7,
+                        "world_x_m": 12.5,
+                        "world_y_m": -2.0,
+                    },
+                    {
+                        "frame_index": 9,
+                        "presentation_ts_s": 1.0,
+                        "world_x_m": 13.0,
+                        "world_y_m": -2.0,
+                    },
+                ],
+            }
+        ],
     )
     observed = payload["objects"][0]["samples"][0]
     fitted = payload["fitted_paths"][0]["samples"][0]
@@ -55,7 +127,10 @@ def test_scene_contract_preserves_2d_coordinates_and_labels_generated_paths():
     assert simulated["provenance"] == "SIMULATED"
     assert "ILLUSTRATIVE" in simulated["illustrative_label"]
     assert len(payload["rival_paths"][0]["hypotheses"][0]["samples"]) == 2
-    assert payload["rival_paths"][0]["hypotheses"][0]["samples"][0]["position_2d_m"] == {"x": 12.5, "y": -2.0}
+    assert payload["rival_paths"][0]["hypotheses"][0]["samples"][0]["position_2d_m"] == {
+        "x": 12.5,
+        "y": -2.0,
+    }
     assert payload["camera_pose"]["status"] == "unknown"
 
 
@@ -67,9 +142,11 @@ def test_radar_never_invents_sources_and_uses_only_verified_deadline_for_urgency
     rows = rank_evidence_needs(certificates)
     assert all(row["availability"] == "unknown" for row in rows)
     assert all(row["retention_deadline"] is None for row in rows)
-    urgent = rank_evidence_needs(certificates,
+    urgent = rank_evidence_needs(
+        certificates,
         known_sources=[{"need_key": "measure_scene_distance", "verified": True}],
-        verified_deadlines={"measure_scene_distance": 2.0})
+        verified_deadlines={"measure_scene_distance": 2.0},
+    )
     scale = next(row for row in urgent if row["need_key"] == "measure_scene_distance")
     assert scale["availability"] == "human_verified_source"
     assert scale["retention_deadline"]["basis"] == "user_verified"
@@ -80,9 +157,15 @@ def test_atlas_contract_requires_scoped_consent_and_rejects_unbounded_or_pii_fie
     assert ConsentInput(opted_in=True).scope_version == SCOPE_VERSION
     with pytest.raises(ValidationError):
         ConsentInput(opted_in=True, scope_version="all-case-data")
-    base = {"source_run_id": "run-1", "coarse_cell": "u4pr", "time_bucket": "2026-Q4",
-            "conflict_type": "crossing", "road_user_mix": {"pedestrian": 2},
-            "metrics": {"near_miss_count": 1}, "reviewer_confirmed": True}
+    base = {
+        "source_run_id": "run-1",
+        "coarse_cell": "u4pr",
+        "time_bucket": "2026-Q4",
+        "conflict_type": "crossing",
+        "road_user_mix": {"pedestrian": 2},
+        "metrics": {"near_miss_count": 1},
+        "reviewer_confirmed": True,
+    }
     assert ContributionInput(**base).coarse_cell == "u4pr"
     with pytest.raises(ValidationError):
         ContributionInput(**{**base, "metrics": {"person_name": 1}})
@@ -91,7 +174,9 @@ def test_atlas_contract_requires_scoped_consent_and_rejects_unbounded_or_pii_fie
 
 
 @pytest.mark.asyncio
-async def test_export_worker_rechecks_full_case_revision_and_writes_hashed_artifacts(tmp_path: Path, monkeypatch):
+async def test_export_worker_rechecks_full_case_revision_and_writes_hashed_artifacts(
+    tmp_path: Path, monkeypatch
+):
     db_file = tmp_path / "phase5.sqlite"
     async_engine = create_async_engine(f"sqlite+aiosqlite:///{db_file}")
     async with async_engine.begin() as connection:
@@ -101,19 +186,47 @@ async def test_export_worker_rechecks_full_case_revision_and_writes_hashed_artif
     media_file.write_bytes(b"synthetic but byte-preserved fixture")
     media_hash = hashlib.sha256(media_file.read_bytes()).hexdigest()
     async with async_factory() as db:
-        case = Case(id="case-export", title="Staged export", owner_id="tester", status=CaseStatus.DRAFT,
-                    consent_given=False)
+        case = Case(
+            id="case-export",
+            title="Staged export",
+            owner_id="tester",
+            status=CaseStatus.DRAFT,
+            consent_given=False,
+        )
         db.add(case)
         await db.flush()
-        db.add(SourceMedia(id="media-export", case_id=case.id, original_filename="staged.mp4",
-            mime_type="video/mp4", byte_length=media_file.stat().st_size, sha256=media_hash,
-            storage_path=str(media_file), status=MediaStatus.STORED))
-        db.add(ReviewerAction(id="action-export", case_id=case.id, target_type="case",
-            target_id=case.id, action="reviewed", after_json="{}", actor="tester"))
+        db.add(
+            SourceMedia(
+                id="media-export",
+                case_id=case.id,
+                original_filename="staged.mp4",
+                mime_type="video/mp4",
+                byte_length=media_file.stat().st_size,
+                sha256=media_hash,
+                storage_path=str(media_file),
+                status=MediaStatus.STORED,
+            )
+        )
+        db.add(
+            ReviewerAction(
+                id="action-export",
+                case_id=case.id,
+                target_type="case",
+                target_id=case.id,
+                action="reviewed",
+                after_json="{}",
+                actor="tester",
+            )
+        )
         await db.commit()
         revision = await _revision_hash(case.id, db)
-        record = ExportRecord(id="export-1", case_id=case.id, case_revision_hash=revision,
-                              status="running", created_by="tester")
+        record = ExportRecord(
+            id="export-1",
+            case_id=case.id,
+            case_revision_hash=revision,
+            status="running",
+            created_by="tester",
+        )
         db.add(record)
         await db.commit()
 

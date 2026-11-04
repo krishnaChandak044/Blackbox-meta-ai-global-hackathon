@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict
 from typing import Any
 
 import numpy as np
@@ -30,7 +29,6 @@ from engine.dynamics.models import (
     FitQuality,
     FittedPoint,
     IdentifiabilityCertificate,
-    UncertaintyBundle,
 )
 from engine.dynamics.uncertainty import propagate_uncertainty
 from engine.identifiability.certificates import certify_quantities
@@ -41,6 +39,7 @@ MODEL_VERSION = "1.0.0"
 
 
 # ── Eligibility checks ────────────────────────────────────────────────────────
+
 
 class InferenceRejected(Exception):
     """Raised when inputs do not meet eligibility criteria."""
@@ -73,9 +72,7 @@ def _check_eligibility(
         raise InferenceRejected("track_empty: no observations")
 
     if len(observations) < 5:
-        raise InferenceRejected(
-            f"insufficient_observations: need ≥5, got {len(observations)}"
-        )
+        raise InferenceRejected(f"insufficient_observations: need ≥5, got {len(observations)}")
 
     # Monotonic timestamps
     ts = [o.get("presentation_ts_s") for o in observations]
@@ -85,9 +82,7 @@ def _check_eligibility(
     ts_arr = np.array(ts, dtype=float)
     diffs = np.diff(ts_arr)
     if np.any(diffs <= 0):
-        raise InferenceRejected(
-            f"timestamps_non_monotonic: min_delta={float(diffs.min()):.6f}s"
-        )
+        raise InferenceRejected(f"timestamps_non_monotonic: min_delta={float(diffs.min()):.6f}s")
 
     # World coordinates
     for i, o in enumerate(observations):
@@ -116,14 +111,19 @@ def _check_eligibility(
 
 # ── Forward model ─────────────────────────────────────────────────────────────
 
+
 def _piecewise_const_accel(
     t: np.ndarray,
     t0: float,
-    x0: float, y0: float,
-    vx0: float, vy0: float,
-    ax1: float, ay1: float,
+    x0: float,
+    y0: float,
+    vx0: float,
+    vy0: float,
+    ax1: float,
+    ay1: float,
     t_break: float | None,
-    ax2: float, ay2: float,
+    ax2: float,
+    ay2: float,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     2-segment piecewise constant acceleration.
@@ -133,8 +133,8 @@ def _piecewise_const_accel(
     """
     dt = t - t0
     if t_break is None:
-        x = x0 + vx0 * dt + 0.5 * ax1 * dt ** 2
-        y = y0 + vy0 * dt + 0.5 * ay1 * dt ** 2
+        x = x0 + vx0 * dt + 0.5 * ax1 * dt**2
+        y = y0 + vy0 * dt + 0.5 * ay1 * dt**2
     else:
         dt1 = np.clip(dt, 0, t_break - t0)
         dt2 = np.maximum(0, dt - (t_break - t0))
@@ -145,13 +145,13 @@ def _piecewise_const_accel(
         yb = y0 + vy0 * (t_break - t0) + 0.5 * ay1 * (t_break - t0) ** 2
         x = np.where(
             dt <= (t_break - t0),
-            x0 + vx0 * dt1 + 0.5 * ax1 * dt1 ** 2,
-            xb + vx_b * dt2 + 0.5 * ax2 * dt2 ** 2,
+            x0 + vx0 * dt1 + 0.5 * ax1 * dt1**2,
+            xb + vx_b * dt2 + 0.5 * ax2 * dt2**2,
         )
         y = np.where(
             dt <= (t_break - t0),
-            y0 + vy0 * dt1 + 0.5 * ay1 * dt1 ** 2,
-            yb + vy_b * dt2 + 0.5 * ay2 * dt2 ** 2,
+            y0 + vy0 * dt1 + 0.5 * ay1 * dt1**2,
+            yb + vy_b * dt2 + 0.5 * ay2 * dt2**2,
         )
     return x, y
 
@@ -169,6 +169,7 @@ def _residuals_2seg(p, t, obs_x, obs_y, w, t_break):
 
 
 # ── Main inference function ───────────────────────────────────────────────────
+
 
 def run_inference(
     observations: list[dict[str, Any]],
@@ -227,7 +228,8 @@ def run_inference(
     hi1 = [t[-1], 1e4, 1e4, max_v, max_v, max_a, max_a]
 
     res1 = least_squares(
-        _residuals_1seg, p0_1,
+        _residuals_1seg,
+        p0_1,
         args=(t, obs_x, obs_y, w),
         bounds=(lo1, hi1),
         method="trf",
@@ -251,7 +253,8 @@ def run_inference(
             hi2 = [t[-1], 1e4, 1e4, max_v, max_v, max_a, max_a, max_a, max_a]
             try:
                 res2 = least_squares(
-                    _residuals_2seg, p0_2,
+                    _residuals_2seg,
+                    p0_2,
                     args=(t, obs_x, obs_y, w, t_break_cand),
                     bounds=(lo2, hi2),
                     method="trf",
@@ -268,7 +271,9 @@ def run_inference(
         # Accept two-segment only if it materially improves the fit (BIC-like)
         n = len(obs) * 2  # both x and y
         bic_1 = n * np.log(res1.cost / n + 1e-12) + 7 * np.log(n)
-        bic_2 = n * np.log(best_2_cost / n + 1e-12) + 9 * np.log(n) if best_2_cost < np.inf else np.inf
+        bic_2 = (
+            n * np.log(best_2_cost / n + 1e-12) + 9 * np.log(n) if best_2_cost < np.inf else np.inf
+        )
 
         if best_params_2seg is not None and bic_2 < bic_1 - 4.0:
             best_res = best_params_2seg
@@ -278,23 +283,21 @@ def run_inference(
     p_fit = best_res.x
     if two_seg_used:
         t0_f, x0_f, y0_f, vx0_f, vy0_f, ax1_f, ay1_f, ax2_f, ay2_f = p_fit
-        ax_fn = lambda tt: np.where(tt <= t_break_used, ax1_f, ax2_f)  # noqa: E731
-        ay_fn = lambda tt: np.where(tt <= t_break_used, ay1_f, ay2_f)  # noqa: E731
         fit_x, fit_y = _piecewise_const_accel(
             t, t0_f, x0_f, y0_f, vx0_f, vy0_f, ax1_f, ay1_f, t_break_used, ax2_f, ay2_f
         )
     else:
         t0_f, x0_f, y0_f, vx0_f, vy0_f, ax_f, ay_f = p_fit
-        ax1_f = ax_f; ay1_f = ay_f; ax2_f = ax_f; ay2_f = ay_f
-        ax_fn = lambda tt: np.full_like(tt, ax_f)  # noqa: E731
-        ay_fn = lambda tt: np.full_like(tt, ay_f)  # noqa: E731
-        fit_x, fit_y = _piecewise_const_accel(t, t0_f, x0_f, y0_f, vx0_f, vy0_f, ax_f, ay_f, None, 0, 0)
+        ax1_f = ax2_f = ax_f
+        ay1_f = ay2_f = ay_f
+        fit_x, fit_y = _piecewise_const_accel(
+            t, t0_f, x0_f, y0_f, vx0_f, vy0_f, ax_f, ay_f, None, 0, 0
+        )
 
     # Velocity at each point (finite-difference of fit)
-    dt_arr = np.diff(t, prepend=t[0] - 1e-6)
     dx_fit = np.gradient(fit_x, t)
     dy_fit = np.gradient(fit_y, t)
-    speeds_ms = np.sqrt(dx_fit ** 2 + dy_fit ** 2)
+    speeds_ms = np.sqrt(dx_fit**2 + dy_fit**2)
 
     # ── Uncertainty propagation ───────────────────────────────────────────────
     uncertainty = propagate_uncertainty(
@@ -310,10 +313,9 @@ def run_inference(
 
     # ── Fit quality ───────────────────────────────────────────────────────────
     residuals_xy = best_res.fun
-    n_res = len(residuals_xy)
     n_obs = len(obs)
     unweighted_residuals = residuals_xy / np.tile(w, 2)
-    rmse = float(np.sqrt(np.mean(unweighted_residuals ** 2)))
+    rmse = float(np.sqrt(np.mean(unweighted_residuals**2)))
 
     # Jacobian → parameter correlation matrix
     covariance = None
@@ -331,7 +333,7 @@ def run_inference(
 
     n_params = len(p_fit)
     dof = max(1, n_obs * 2 - n_params)
-    chi2r = float(np.sum(best_res.fun ** 2) / dof)
+    chi2r = float(np.sum(best_res.fun**2) / dof)
     covariance = cov * chi2r if cov is not None else None
 
     fit_quality = FitQuality(
@@ -343,9 +345,7 @@ def run_inference(
         convergence_message=best_res.message,
         reduced_chi_squared=chi2r,
         param_correlation_flat=corr_flat,
-        param_names=list(
-            ["t0", "x0", "y0", "vx0", "vy0", "ax1", "ay1", "ax2", "ay2"][:n_params]
-        ),
+        param_names=list(["t0", "x0", "y0", "vx0", "vy0", "ax1", "ay1", "ax2", "ay2"][:n_params]),
     )
 
     # Per-frame uncertainty ellipse combines the five declared contributors.
@@ -362,25 +362,40 @@ def run_inference(
         sp_ms = float(speeds_ms[i])
         sp_kmh = sp_ms * 3.6
         # Scale error applies to relative coordinates, not the arbitrary origin.
-        pos_x_sigma = float(np.sqrt(
-            sigmas[i] ** 2 + hom_sigma_m ** 2
-            + ((fit_x[i] - origin_x) * scale_rel) ** 2
-            + (dx_fit[i] * time_sigma) ** 2 + model_pos_sigma ** 2
-        ))
-        pos_y_sigma = float(np.sqrt(
-            sigmas[i] ** 2 + hom_sigma_m ** 2
-            + ((fit_y[i] - origin_y) * scale_rel) ** 2
-            + (dy_fit[i] * time_sigma) ** 2 + model_pos_sigma ** 2
-        ))
-        fitted_points.append(FittedPoint(
-            frame_index=o["frame_index"], presentation_ts_s=float(t[i]),
-            world_x_m=float(fit_x[i]), world_y_m=float(fit_y[i]),
-            vx_ms=float(dx_fit[i]), vy_ms=float(dy_fit[i]),
-            speed_ms=sp_ms, speed_kmh=sp_kmh,
-            pos_sigma_x_m=pos_x_sigma, pos_sigma_y_m=pos_y_sigma,
-            speed_lo_kmh=max(0.0, sp_ms - half_w_ms) * 3.6,
-            speed_hi_kmh=(sp_ms + half_w_ms) * 3.6,
-        ))
+        pos_x_sigma = float(
+            np.sqrt(
+                sigmas[i] ** 2
+                + hom_sigma_m**2
+                + ((fit_x[i] - origin_x) * scale_rel) ** 2
+                + (dx_fit[i] * time_sigma) ** 2
+                + model_pos_sigma**2
+            )
+        )
+        pos_y_sigma = float(
+            np.sqrt(
+                sigmas[i] ** 2
+                + hom_sigma_m**2
+                + ((fit_y[i] - origin_y) * scale_rel) ** 2
+                + (dy_fit[i] * time_sigma) ** 2
+                + model_pos_sigma**2
+            )
+        )
+        fitted_points.append(
+            FittedPoint(
+                frame_index=o["frame_index"],
+                presentation_ts_s=float(t[i]),
+                world_x_m=float(fit_x[i]),
+                world_y_m=float(fit_y[i]),
+                vx_ms=float(dx_fit[i]),
+                vy_ms=float(dy_fit[i]),
+                speed_ms=sp_ms,
+                speed_kmh=sp_kmh,
+                pos_sigma_x_m=pos_x_sigma,
+                pos_sigma_y_m=pos_y_sigma,
+                speed_lo_kmh=max(0.0, sp_ms - half_w_ms) * 3.6,
+                speed_hi_kmh=(sp_ms + half_w_ms) * 3.6,
+            )
+        )
 
     # ── Braking onset ─────────────────────────────────────────────────────────
     braking_onset = None
@@ -417,7 +432,7 @@ def run_inference(
             )
 
     # ── Identifiability certificates ──────────────────────────────────────────
-    entry_speed_ms = float(np.sqrt(vx0_f ** 2 + vy0_f ** 2))
+    entry_speed_ms = float(np.sqrt(vx0_f**2 + vy0_f**2))
     certs = certify_quantities(
         calibration=calibration,
         n_obs=n_obs,
@@ -450,32 +465,41 @@ def run_inference(
                 d_lo, d_hi = max(0.0, d_ms2 - half), d_ms2 + half
             else:
                 certs["mean_deceleration"] = IdentifiabilityCertificate(
-                    quantity="mean_deceleration", status="conditional", interval_type="illustrative_range",
+                    quantity="mean_deceleration",
+                    status="conditional",
+                    interval_type="illustrative_range",
                     condition="local linear covariance approximation; interval coverage unvalidated",
                     reason="Deceleration point fit exists, but its uncertainty is too broad for a stable interval.",
-                    limiting_source="model_assumption", improving_observation="More observations around the braking transition",
+                    limiting_source="model_assumption",
+                    improving_observation="More observations around the braking transition",
                 )
                 d_ms2 = None
         else:
             certs["mean_deceleration"] = IdentifiabilityCertificate(
-                quantity="mean_deceleration", status="conditional", interval_type="illustrative_range",
+                quantity="mean_deceleration",
+                status="conditional",
+                interval_type="illustrative_range",
                 condition="parameter covariance was unavailable",
                 reason="A deceleration estimate exists but no interval could be computed from fit diagnostics.",
-                limiting_source="model_assumption", improving_observation="Add observations spanning the transition",
+                limiting_source="model_assumption",
+                improving_observation="Add observations spanning the transition",
             )
             d_ms2 = None
 
-    provenance_key = json.dumps({
-        "track_id": track_id,
-        "track_version_hash": track_version_hash,
-        "calibration_fit_id": calibration.get("homography_fit_id", ""),
-        "media_sha256": media_sha256,
-        "model": MODEL_NAME,
-        "model_version": MODEL_VERSION,
-        "software_revision": software_revision,
-        "seed": seed,
-        "params": params_json,
-    }, sort_keys=True).encode()
+    provenance_key = json.dumps(
+        {
+            "track_id": track_id,
+            "track_version_hash": track_version_hash,
+            "calibration_fit_id": calibration.get("homography_fit_id", ""),
+            "media_sha256": media_sha256,
+            "model": MODEL_NAME,
+            "model_version": MODEL_VERSION,
+            "software_revision": software_revision,
+            "seed": seed,
+            "params": params_json,
+        },
+        sort_keys=True,
+    ).encode()
     run_id = hashlib.sha256(provenance_key).hexdigest()[:36]
 
     return DynamicsResult(

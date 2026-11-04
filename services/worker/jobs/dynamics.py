@@ -17,21 +17,26 @@ import json
 import logging
 import math
 import subprocess
-import uuid
 from dataclasses import asdict
 from datetime import datetime, timezone
 
 from sqlalchemy import select
 
-from engine.dynamics.inference import run_inference, InferenceRejected
+from engine.dynamics.inference import InferenceRejected, run_inference
 from engine.geometry.homography import (
-    MIN_ANCHORS,
     MAX_ACCEPTABLE_CONDITION_NUMBER,
     MAX_ACCEPTABLE_REPROJECTION_RMSE_PX,
+    MIN_ANCHORS,
 )
 from services.api.db.models import (
-    DynamicsRun, HomographyFit, JobStatus, ObjectTrack,
-    ProcessingJob, ProcessingLog, SourceMedia, TrackPointRow,
+    DynamicsRun,
+    HomographyFit,
+    JobStatus,
+    ObjectTrack,
+    ProcessingJob,
+    ProcessingLog,
+    SourceMedia,
+    TrackPointRow,
 )
 from services.worker.celery_app import app as celery_app
 from services.worker.db import get_sync_session
@@ -41,19 +46,31 @@ logger = logging.getLogger(__name__)
 
 def _git_revision() -> str:
     try:
-        return subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL
-        ).decode().strip()
+        return (
+            subprocess.check_output(
+                ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL
+            )
+            .decode()
+            .strip()
+        )
     except Exception:
         return "unknown"
 
 
 def _hash_track_version(points: list) -> str:
     blob = json.dumps(
-        [{"fi": p.frame_index, "x": p.world_x, "y": p.world_y, "ts": p.presentation_ts_s,
-          "sigma": p.pixel_localisation_sigma_m}
-         for p in points],
-        sort_keys=True, separators=(",", ":"),
+        [
+            {
+                "fi": p.frame_index,
+                "x": p.world_x,
+                "y": p.world_y,
+                "ts": p.presentation_ts_s,
+                "sigma": p.pixel_localisation_sigma_m,
+            }
+            for p in points
+        ],
+        sort_keys=True,
+        separators=(",", ":"),
     ).encode()
     return hashlib.sha256(blob).hexdigest()[:16]
 
@@ -121,7 +138,9 @@ def _run(db, dynamics_run_id: str) -> dict:
     if track is None:
         raise RuntimeError(f"Track {dr.track_id!r} not found")
     if not track.is_human_confirmed:
-        raise InferenceRejected("track_unconfirmed: a reviewer must confirm the vehicle track first")
+        raise InferenceRejected(
+            "track_unconfirmed: a reviewer must confirm the vehicle track first"
+        )
 
     points_q = (
         db.execute(
@@ -162,7 +181,9 @@ def _run(db, dynamics_run_id: str) -> dict:
     # ── Load calibration ──────────────────────────────────────────────────────
     hf = db.get(HomographyFit, dr.calibration_fit_id)
     if hf is None or not hf.is_active:
-        raise InferenceRejected(f"calibration_stale: active HomographyFit {dr.calibration_fit_id!r} not found")
+        raise InferenceRejected(
+            f"calibration_stale: active HomographyFit {dr.calibration_fit_id!r} not found"
+        )
     if (
         hf.anchor_count < MIN_ANCHORS + 1
         or hf.validation_anchor_count < 1
@@ -177,7 +198,9 @@ def _run(db, dynamics_run_id: str) -> dict:
         or not math.isfinite(hf.scale_relative_error)
         or hf.scale_relative_error > 0.10
     ):
-        raise InferenceRejected("calibration_quality_rejected: physical motion analysis requires a validated calibration")
+        raise InferenceRejected(
+            "calibration_quality_rejected: physical motion analysis requires a validated calibration"
+        )
 
     calibration = {
         "metres_per_pixel": hf.scale_metres_per_pixel,
@@ -220,7 +243,9 @@ def _run(db, dynamics_run_id: str) -> dict:
     dr.uncertainty_json = json.dumps(asdict(result.uncertainty))
     dr.certificates_json = json.dumps({k: asdict(v) for k, v in result.certificates.items()})
     dr.fit_quality_json = json.dumps(asdict(result.fit_quality))
-    dr.braking_onset_json = json.dumps(asdict(result.braking_onset)) if result.braking_onset else None
+    dr.braking_onset_json = (
+        json.dumps(asdict(result.braking_onset)) if result.braking_onset else None
+    )
     dr.entry_speed_kmh = result.entry_speed_kmh
     dr.entry_speed_lo_kmh = result.entry_speed_lo_kmh
     dr.entry_speed_hi_kmh = result.entry_speed_hi_kmh
@@ -230,21 +255,23 @@ def _run(db, dynamics_run_id: str) -> dict:
     dr.interval_type = result.interval_type
     dr.completed_at = datetime.now(timezone.utc)
 
-    db.add(ProcessingLog(
-        case_id=dr.case_id,
-        media_id=dr.media_id,
-        stage="dynamics",
-        tool_name="piecewise_const_accel_2d",
-        tool_version=result.model_version,
-        operator="system",
-        notes=(
-            f"Dynamics run {dynamics_run_id}: "
-            f"entry_speed={result.entry_speed_kmh:.1f} km/h "
-            f"[{result.entry_speed_lo_kmh if result.entry_speed_lo_kmh is not None else '?'}, "
-            f"{result.entry_speed_hi_kmh if result.entry_speed_hi_kmh is not None else '?'}] "
-            f"interval_type={result.interval_type}"
-        ),
-    ))
+    db.add(
+        ProcessingLog(
+            case_id=dr.case_id,
+            media_id=dr.media_id,
+            stage="dynamics",
+            tool_name="piecewise_const_accel_2d",
+            tool_version=result.model_version,
+            operator="system",
+            notes=(
+                f"Dynamics run {dynamics_run_id}: "
+                f"entry_speed={result.entry_speed_kmh:.1f} km/h "
+                f"[{result.entry_speed_lo_kmh if result.entry_speed_lo_kmh is not None else '?'}, "
+                f"{result.entry_speed_hi_kmh if result.entry_speed_hi_kmh is not None else '?'}] "
+                f"interval_type={result.interval_type}"
+            ),
+        )
+    )
     db.commit()
 
     return {

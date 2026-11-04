@@ -2,8 +2,8 @@
 Blackbox FastAPI — Phase 1 entry point.
 """
 
-from collections.abc import AsyncGenerator
 import os
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 import structlog
@@ -14,9 +14,23 @@ from fastapi.responses import JSONResponse, ORJSONResponse
 from services.api.auth.session import _password, _secret, is_authenticated
 from services.api.auth.session import router as auth_router
 from services.api.db.session import init_db
-from services.api.routes import (atlas, calibration, cases, claims, dynamics, exports, jobs,
-                                 media, rescue, rivals, scene, simulation, tracks, transcripts,
-                                 review_workspace)
+from services.api.routes import (
+    atlas,
+    calibration,
+    cases,
+    claims,
+    dynamics,
+    exports,
+    jobs,
+    media,
+    rescue,
+    review_workspace,
+    rivals,
+    scene,
+    simulation,
+    tracks,
+    transcripts,
+)
 
 logger = structlog.get_logger()
 
@@ -44,7 +58,13 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[origin.strip() for origin in os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",") if origin.strip()],
+    allow_origins=[
+        origin.strip()
+        for origin in os.getenv(
+            "CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"
+        ).split(",")
+        if origin.strip()
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

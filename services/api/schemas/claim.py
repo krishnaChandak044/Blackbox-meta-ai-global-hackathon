@@ -1,7 +1,11 @@
 """Pydantic schemas for Claim + ClaimCheck."""
+
 from __future__ import annotations
+
 from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, Field
+
 
 class ClaimAssertionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -13,6 +17,7 @@ class ClaimAssertionOut(BaseModel):
     raw_text: str
     source_ts_start: float
     source_ts_end: float
+
 
 class TranscriptClaimResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -29,9 +34,11 @@ class TranscriptClaimResponse(BaseModel):
     created_at: datetime
     created_by: str
 
+
 class TranscriptClaimUpdate(BaseModel):
     raw_text: str | None = Field(None, min_length=1)
     speaker: str | None = Field(None, min_length=1)
+
 
 class ClaimCheckResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -47,4 +54,3 @@ class ClaimCheckResponse(BaseModel):
     homography_fit_id: str | None
     checked_at: datetime
     checked_by: str
-

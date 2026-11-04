@@ -22,7 +22,6 @@ import os
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from services.api.db.models import (
@@ -101,7 +100,10 @@ def _run(db: Session, media_id: str, job: ProcessingJob) -> dict:
     # ── Attempt 2: Synthetic placeholder (only if explicitly enabled) ─────────
     if transcript_result is None:
         if _ENABLE_SYNTHETIC:
-            from services.worker.adapters.synthetic_transcript_adapter import SyntheticTranscriptAdapter
+            from services.worker.adapters.synthetic_transcript_adapter import (
+                SyntheticTranscriptAdapter,
+            )
+
             synth = SyntheticTranscriptAdapter()
             transcript_result = synth.transcribe(
                 media.storage_path,
@@ -142,19 +144,21 @@ def _run(db: Session, media_id: str, job: ProcessingJob) -> dict:
         created_by="system",
     )
     db.add(tr)
-    db.add(ProcessingLog(
-        case_id=media.case_id,
-        media_id=media_id,
-        stage="transcribe",
-        tool_name=used_adapter,
-        tool_version="0.1.0",
-        operator="system",
-        notes=(
-            f"Transcript {tr.id}: {word_count} words, {speaker_count} speakers."
-            + (" [SYNTHETIC PLACEHOLDER]" if tr.is_synthetic else "")
-        ),
-    ))
-    db.flush()   # get tr.id without committing
+    db.add(
+        ProcessingLog(
+            case_id=media.case_id,
+            media_id=media_id,
+            stage="transcribe",
+            tool_name=used_adapter,
+            tool_version="0.1.0",
+            operator="system",
+            notes=(
+                f"Transcript {tr.id}: {word_count} words, {speaker_count} speakers."
+                + (" [SYNTHETIC PLACEHOLDER]" if tr.is_synthetic else "")
+            ),
+        )
+    )
+    db.flush()  # get tr.id without committing
     # Caller commits — extraction is dispatched only after that commit returns
     return {
         "transcript_id": tr.id,
@@ -164,7 +168,9 @@ def _run(db: Session, media_id: str, job: ProcessingJob) -> dict:
     }
 
 
-def _dispatch_extraction(db: Session, transcript_id: str, media_id: str, parent_job: ProcessingJob) -> None:
+def _dispatch_extraction(
+    db: Session, transcript_id: str, media_id: str, parent_job: ProcessingJob
+) -> None:
     """
     Dispatch claim extraction as a new job.
     Called AFTER the transcription db.commit() — no race condition.
@@ -183,7 +189,10 @@ def _dispatch_extraction(db: Session, transcript_id: str, media_id: str, parent_
         db.commit()
 
         extract_claims_task.delay(transcript_id, extract_job.id)
-        logger.info("transcribe.dispatched_extraction", extra={"transcript_id": transcript_id, "job_id": extract_job.id})
+        logger.info(
+            "transcribe.dispatched_extraction",
+            extra={"transcript_id": transcript_id, "job_id": extract_job.id},
+        )
     except Exception as e:
         # Extraction failure must not fail the transcription job
         logger.warning("transcribe.extraction_dispatch_failed", extra={"error": str(e)})

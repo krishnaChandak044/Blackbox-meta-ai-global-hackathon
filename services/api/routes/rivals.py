@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import json
 import asyncio
+import json
 import math
-import uuid
 from dataclasses import asdict
 from datetime import datetime
 
@@ -14,15 +13,21 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from engine.rival.hypothesis_search import search_rivals
 from engine.geometry.homography import (
-    MIN_ANCHORS,
     MAX_ACCEPTABLE_CONDITION_NUMBER,
     MAX_ACCEPTABLE_REPROJECTION_RMSE_PX,
+    MIN_ANCHORS,
     homography_fit_is_usable,
 )
+from engine.rival.hypothesis_search import search_rivals
 from services.api.auth.session import current_user
-from services.api.db.models import DynamicsRun, HomographyFit, ObjectTrack, RivalSearch, TrackPointRow
+from services.api.db.models import (
+    DynamicsRun,
+    HomographyFit,
+    ObjectTrack,
+    RivalSearch,
+    TrackPointRow,
+)
 from services.api.db.session import get_db
 from services.api.routes.dynamics import _hash_track_points, _require_case_media
 
@@ -31,6 +36,7 @@ router = APIRouter(prefix="/cases/{case_id}/media/{media_id}", tags=["rivals"])
 
 class SecondViewInput(BaseModel):
     """Second-view observations plus primary-to-second synchronization metadata."""
+
     synchronized: bool = False
     calibrated: bool = False
     same_world_frame: bool = False
@@ -63,11 +69,14 @@ class RivalSearchResponse(BaseModel):
 
 def _to_response(row: RivalSearch) -> RivalSearchResponse:
     return RivalSearchResponse(
-        id=row.id, primary_run_id=row.primary_run_id,
-        manifest=json.loads(row.manifest_json), rivals=json.loads(row.rivals_json),
+        id=row.id,
+        primary_run_id=row.primary_run_id,
+        manifest=json.loads(row.manifest_json),
+        rivals=json.loads(row.rivals_json),
         empty_search_message=row.empty_search_message,
         second_view_used=row.second_view_used,
-        second_view_notes=row.second_view_notes, created_at=row.created_at,
+        second_view_notes=row.second_view_notes,
+        created_at=row.created_at,
     )
 
 
@@ -81,7 +90,12 @@ async def run_rival_search(
 ) -> RivalSearchResponse:
     media = await _require_case_media(case_id, media_id, db)
     primary = await db.get(DynamicsRun, payload.primary_run_id)
-    if primary is None or primary.case_id != case_id or primary.media_id != media_id or primary.status != "done":
+    if (
+        primary is None
+        or primary.case_id != case_id
+        or primary.media_id != media_id
+        or primary.status != "done"
+    ):
         raise HTTPException(409, "A completed dynamics run for this media is required")
     if primary.entry_speed_kmh is None:
         raise HTTPException(409, "Primary entry speed is not available; cannot bound rival search")
@@ -89,7 +103,8 @@ async def run_rival_search(
     if track is None or not track.is_human_confirmed:
         raise HTTPException(409, "The source track must still exist and be reviewer-confirmed")
     points_result = await db.execute(
-        select(TrackPointRow).where(TrackPointRow.track_id == track.id)
+        select(TrackPointRow)
+        .where(TrackPointRow.track_id == track.id)
         .order_by(TrackPointRow.presentation_ts_s)
     )
     points = points_result.scalars().all()
@@ -110,19 +125,29 @@ async def run_rival_search(
         or not math.isfinite(fit.scale_relative_error)
         or fit.scale_relative_error > 0.10
     ):
-        raise HTTPException(409, "Calibration is not validated; physical rival analysis is unavailable")
+        raise HTTPException(
+            409, "Calibration is not validated; physical rival analysis is unavailable"
+        )
     if media.sha256 != primary.media_sha256:
         raise HTTPException(409, "Media changed after the primary run")
     observations = [
-        {"frame_index": p.frame_index, "presentation_ts_s": p.presentation_ts_s,
-         "world_x_m": p.world_x, "world_y_m": p.world_y}
-        for p in points if p.world_x is not None and p.world_y is not None
+        {
+            "frame_index": p.frame_index,
+            "presentation_ts_s": p.presentation_ts_s,
+            "world_x_m": p.world_x,
+            "world_y_m": p.world_y,
+        }
+        for p in points
+        if p.world_x is not None and p.world_y is not None
     ]
     onset_data = json.loads(primary.braking_onset_json) if primary.braking_onset_json else None
     primary_data = {
-        "run_id": primary.id, "entry_speed_kmh": primary.entry_speed_kmh,
+        "run_id": primary.id,
+        "entry_speed_kmh": primary.entry_speed_kmh,
         "mean_decel_ms2": primary.mean_decel_ms2,
-        "braking_onset_s": onset_data.get("ts_lo_s") if onset_data else observations[0]["presentation_ts_s"],
+        "braking_onset_s": onset_data.get("ts_lo_s")
+        if onset_data
+        else observations[0]["presentation_ts_s"],
     }
     params = {
         "n_grid": payload.grid_n,
@@ -136,9 +161,13 @@ async def run_rival_search(
     second_view = payload.second_view.model_dump() if payload.second_view else None
     try:
         result = await asyncio.to_thread(
-            search_rivals, primary_data, observations,
+            search_rivals,
+            primary_data,
+            observations,
             {"calibrated": fit.scale_metres_per_pixel is not None},
-            params, second_view, payload.seed,
+            params,
+            second_view,
+            payload.seed,
         )
     except (ValueError, KeyError, TypeError) as exc:
         raise HTTPException(422, str(exc)) from exc
@@ -146,7 +175,9 @@ async def run_rival_search(
     if existing is not None:
         return _to_response(existing)
     row = RivalSearch(
-        id=result.manifest.search_id, case_id=case_id, media_id=media_id,
+        id=result.manifest.search_id,
+        case_id=case_id,
+        media_id=media_id,
         primary_run_id=primary.id,
         manifest_json=json.dumps(asdict(result.manifest), sort_keys=True),
         rivals_json=json.dumps([asdict(rival) for rival in result.rivals]),
@@ -169,30 +200,41 @@ async def get_latest_rivals(
 ) -> RivalSearchResponse:
     media = await _require_case_media(case_id, media_id, db)
     result = await db.execute(
-        select(RivalSearch).where(RivalSearch.case_id == case_id, RivalSearch.media_id == media_id)
-        .order_by(RivalSearch.created_at.desc()).limit(1)
+        select(RivalSearch)
+        .where(RivalSearch.case_id == case_id, RivalSearch.media_id == media_id)
+        .order_by(RivalSearch.created_at.desc())
+        .limit(1)
     )
     row = result.scalar_one_or_none()
     if row is None:
         raise HTTPException(404, "No rival search found; submit POST /rivals/search")
     primary = await db.get(DynamicsRun, row.primary_run_id)
     if primary is None or media.sha256 != primary.media_sha256:
-        raise HTTPException(409, "Rival search is stale because its primary run or source media changed")
+        raise HTTPException(
+            409, "Rival search is stale because its primary run or source media changed"
+        )
     points_result = await db.execute(
-        select(TrackPointRow).where(TrackPointRow.track_id == primary.track_id)
+        select(TrackPointRow)
+        .where(TrackPointRow.track_id == primary.track_id)
         .order_by(TrackPointRow.presentation_ts_s)
     )
     if _hash_track_points(points_result.scalars().all()) != primary.track_version_hash:
         raise HTTPException(409, "Rival search is stale because the source track changed")
     fit = await db.get(HomographyFit, primary.calibration_fit_id)
-    if fit is None or not fit.is_active or not homography_fit_is_usable(
-        anchor_count=fit.anchor_count,
-        validation_anchor_count=fit.validation_anchor_count,
-        reprojection_rmse_px=fit.reprojection_rmse_px,
-        condition_number=fit.condition_number,
-        scale_metres_per_pixel=fit.scale_metres_per_pixel,
-        scale_relative_error=fit.scale_relative_error,
-        require_metric_scale=True,
+    if (
+        fit is None
+        or not fit.is_active
+        or not homography_fit_is_usable(
+            anchor_count=fit.anchor_count,
+            validation_anchor_count=fit.validation_anchor_count,
+            reprojection_rmse_px=fit.reprojection_rmse_px,
+            condition_number=fit.condition_number,
+            scale_metres_per_pixel=fit.scale_metres_per_pixel,
+            scale_relative_error=fit.scale_relative_error,
+            require_metric_scale=True,
+        )
     ):
-        raise HTTPException(409, "Rival search is stale because its calibration is no longer active")
+        raise HTTPException(
+            409, "Rival search is stale because its calibration is no longer active"
+        )
     return _to_response(row)

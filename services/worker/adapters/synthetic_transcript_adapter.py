@@ -15,10 +15,6 @@ transcription service is available.
 
 from __future__ import annotations
 
-import hashlib
-import os
-import random
-
 from services.worker.adapters.muse_voice_adapter import TranscriptResult
 
 _PLACEHOLDER_SEGMENTS = [
@@ -66,5 +62,5 @@ class SyntheticTranscriptAdapter:
             diarised_segments=segments,
             duration_seconds=dur,
             transcription_model=self.TRANSCRIPTION_MODEL,
-            is_synthetic=True,   # ← always True — non-negotiable
+            is_synthetic=True,  # ← always True — non-negotiable
         )

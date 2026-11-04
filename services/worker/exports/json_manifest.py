@@ -1,4 +1,5 @@
 """Canonical JSON evidence export helpers."""
+
 from __future__ import annotations
 
 import hashlib
@@ -8,6 +9,7 @@ from typing import Any
 
 def json_default(value: Any) -> Any:
     from services.api.db.revision import _default
+
     try:
         return _default(value)
     except TypeError:
@@ -19,6 +21,7 @@ def json_default(value: Any) -> Any:
 
 def canonical_json(value: Any) -> bytes:
     from services.api.db.revision import canonical_json as encode
+
     return encode(value)
 
 

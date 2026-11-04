@@ -143,7 +143,11 @@ def homography_fit_is_usable(
     require_metric_scale: bool = False,
 ) -> bool:
     """Shared gate for exposing physical measurements from a stored fit."""
-    if anchor_count < MIN_ANCHORS + 1 or validation_anchor_count is None or validation_anchor_count < 1:
+    if (
+        anchor_count < MIN_ANCHORS + 1
+        or validation_anchor_count is None
+        or validation_anchor_count < 1
+    ):
         return False
     if (
         reprojection_rmse_px is None

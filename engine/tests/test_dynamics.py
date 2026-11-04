@@ -10,7 +10,6 @@ import pytest
 
 from engine.dynamics.inference import InferenceRejected, run_inference
 
-
 CALIBRATION = {
     "metres_per_pixel": 0.05,
     "homography_rmse_px": 0.5,
@@ -34,13 +33,15 @@ def _constant_speed_observations(noise_sigma: float = 0.0002) -> tuple[list[dict
     true_speed = 12.0
     observations = []
     for index, time_s in enumerate(times):
-        observations.append({
-            "frame_index": index,
-            "presentation_ts_s": float(time_s),
-            "world_x_m": float(true_speed * time_s + rng.normal(0, noise_sigma)),
-            "world_y_m": float(rng.normal(0, noise_sigma)),
-            "localisation_sigma_m": noise_sigma,
-        })
+        observations.append(
+            {
+                "frame_index": index,
+                "presentation_ts_s": float(time_s),
+                "world_x_m": float(true_speed * time_s + rng.normal(0, noise_sigma)),
+                "world_y_m": float(rng.normal(0, noise_sigma)),
+                "localisation_sigma_m": noise_sigma,
+            }
+        )
     return observations, true_speed
 
 

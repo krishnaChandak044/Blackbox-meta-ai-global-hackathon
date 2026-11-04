@@ -70,23 +70,29 @@ def run_counterfactual(
         pre_brake = min(elapsed, delay)
         braking_elapsed = max(0.0, elapsed - delay)
         braking_elapsed = min(braking_elapsed, stop_after_brake)
-        distance = speed_ms * pre_brake + speed_ms * braking_elapsed - 0.5 * decel * braking_elapsed**2
-        current_speed = speed_ms if elapsed <= delay else max(0.0, speed_ms - decel * braking_elapsed)
+        distance = (
+            speed_ms * pre_brake + speed_ms * braking_elapsed - 0.5 * decel * braking_elapsed**2
+        )
+        current_speed = (
+            speed_ms if elapsed <= delay else max(0.0, speed_ms - decel * braking_elapsed)
+        )
         vx, vy = current_speed * direction_x, current_speed * direction_y
-        points.append(FittedPoint(
-            frame_index=observed.frame_index,
-            presentation_ts_s=observed.presentation_ts_s,
-            world_x_m=first.world_x_m + direction_x * distance,
-            world_y_m=first.world_y_m + direction_y * distance,
-            vx_ms=vx,
-            vy_ms=vy,
-            speed_ms=current_speed,
-            speed_kmh=current_speed * 3.6,
-            pos_sigma_x_m=observed.pos_sigma_x_m,
-            pos_sigma_y_m=observed.pos_sigma_y_m,
-            speed_lo_kmh=current_speed * 3.6,
-            speed_hi_kmh=current_speed * 3.6,
-        ))
+        points.append(
+            FittedPoint(
+                frame_index=observed.frame_index,
+                presentation_ts_s=observed.presentation_ts_s,
+                world_x_m=first.world_x_m + direction_x * distance,
+                world_y_m=first.world_y_m + direction_y * distance,
+                vx_ms=vx,
+                vy_ms=vy,
+                speed_ms=current_speed,
+                speed_kmh=current_speed * 3.6,
+                pos_sigma_x_m=observed.pos_sigma_x_m,
+                pos_sigma_y_m=observed.pos_sigma_y_m,
+                speed_lo_kmh=current_speed * 3.6,
+                speed_hi_kmh=current_speed * 3.6,
+            )
+        )
 
     assumptions = {
         "motion_model": "constant_speed_then_constant_deceleration",
@@ -96,7 +102,9 @@ def run_counterfactual(
         "interval_type": "single illustrative scenario, not a probability interval",
         "observed_time_range_s": [start_t, last.presentation_ts_s],
         "scenario_stopping_time_s_after_start": stopping_time,
-        "braking_onset_basis": "detected interval" if has_observed_onset else "track start proxy; onset not identifiable",
+        "braking_onset_basis": "detected interval"
+        if has_observed_onset
+        else "track start proxy; onset not identifiable",
         "intervention": {
             "braking_onset_shift_s": intervention.braking_onset_shift_s,
             "entry_speed_override_kmh": intervention.entry_speed_override_kmh,
@@ -122,7 +130,10 @@ def compute_sensitivity(
     if baseline.entry_speed_kmh is None or baseline.mean_decel_ms2 is None:
         return []
     perturbations = perturbations or {
-        "entry_speed_override_kmh": [max(0.0, baseline.entry_speed_kmh - 5), baseline.entry_speed_kmh + 5],
+        "entry_speed_override_kmh": [
+            max(0.0, baseline.entry_speed_kmh - 5),
+            baseline.entry_speed_kmh + 5,
+        ],
         "braking_onset_shift_s": [-0.5, 0.5],
         "decel_override_ms2": [max(0.1, baseline.mean_decel_ms2 - 1), baseline.mean_decel_ms2 + 1],
     }

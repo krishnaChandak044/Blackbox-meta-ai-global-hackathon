@@ -1,4 +1,5 @@
 """Canonical case-content revision hashing shared by API and export worker."""
+
 from __future__ import annotations
 
 import hashlib
@@ -17,8 +18,14 @@ def _default(value: Any) -> Any:
 
 
 def canonical_json(value: Any) -> bytes:
-    return json.dumps(value, default=_default, sort_keys=True, separators=(",", ":"),
-                      ensure_ascii=False, allow_nan=False).encode("utf-8")
+    return json.dumps(
+        value,
+        default=_default,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
 
 
 def case_revision_hash(snapshot: dict[str, Any]) -> str:

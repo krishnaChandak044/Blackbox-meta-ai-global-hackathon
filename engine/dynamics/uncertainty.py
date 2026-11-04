@@ -17,7 +17,6 @@ from __future__ import annotations
 import numpy as np
 
 from engine.dynamics.models import (
-    IntervalType,
     UncertaintyBundle,
     UncertaintyContribution,
 )
@@ -60,7 +59,11 @@ def propagate_uncertainty(
     # sigma_m = tracker RMS in pixels × metres_per_pixel
     sigma_pix_m = float(np.mean(sigmas_m))
     # Effect on speed: uncertainty in position over dt
-    dts = np.diff(timestamps_s) if timestamps_s is not None and len(timestamps_s) > 1 else np.array([])
+    dts = (
+        np.diff(timestamps_s)
+        if timestamps_s is not None and len(timestamps_s) > 1
+        else np.array([])
+    )
     mean_dt = float(np.median(dts)) if len(dts) else 0.0
     if mean_dt <= 0:
         raise ValueError("Cannot propagate uncertainty without positive measured frame intervals")
@@ -105,8 +108,10 @@ def propagate_uncertainty(
         source="frame_timestamp",
         sigma_metres_or_ms=float(sigma_speed_ts),
         distribution="gaussian",
-        metadata=(f"frame_duration_sigma_s={frame_sigma_s:.6f}; "
-                  f"{vfr_meta.get('timestamp_metadata', 'camera clock accuracy unknown')}"),
+        metadata=(
+            f"frame_duration_sigma_s={frame_sigma_s:.6f}; "
+            f"{vfr_meta.get('timestamp_metadata', 'camera clock accuracy unknown')}"
+        ),
         propagation_method=f"Monte Carlo N={n_samples} seed={seed}",
     )
 

@@ -19,18 +19,18 @@ Tests:
 
 from __future__ import annotations
 
-import json
 import os
 import uuid
-from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from engine.claims.models import Claim, TrackDetailLite
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. Synthetic adapter text is NOT witness statements
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def test_synthetic_adapter_is_not_witness_statements():
     """Synthetic adapter must produce placeholder text, not fake witness phrases."""
@@ -64,6 +64,7 @@ def test_synthetic_adapter_is_not_witness_statements():
 # 2. Synthetic fallback only fires under ENABLE_SYNTHETIC_TRANSCRIPT=true
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_transcription_worker_fails_without_flag():
     """If MuseVoice is unavailable and ENABLE_SYNTHETIC_TRANSCRIPT is not set,
     the worker must raise RuntimeError — not silently produce a synthetic transcript."""
@@ -81,11 +82,15 @@ def test_transcription_worker_fails_without_flag():
     with patch.dict(os.environ, {"ENABLE_SYNTHETIC_TRANSCRIPT": "false"}, clear=False):
         # Re-import to pick up env var
         import importlib
+
         import services.worker.jobs.transcription as transcription_mod
+
         importlib.reload(transcription_mod)
 
-        with patch("services.worker.adapters.muse_voice_adapter.MuseVoiceAdapter.transcribe",
-                   side_effect=AdapterUnavailable("not configured")):
+        with patch(
+            "services.worker.adapters.muse_voice_adapter.MuseVoiceAdapter.transcribe",
+            side_effect=AdapterUnavailable("not configured"),
+        ):
             with pytest.raises(RuntimeError, match="No transcription service is configured"):
                 transcription_mod._run(mock_db, "media-1", mock_job)
 
@@ -93,6 +98,7 @@ def test_transcription_worker_fails_without_flag():
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. Claim extraction blocks on synthetic transcripts
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def test_claim_extraction_blocked_on_synthetic_transcript():
     """
@@ -122,6 +128,7 @@ def test_claim_extraction_blocked_on_synthetic_transcript():
     assert result.get("blocked") == "synthetic"
     # db.add must only have been called with ProcessingLog, not TranscriptClaim
     from services.api.db.models import TranscriptClaim
+
     for call in mock_db.add.call_args_list:
         assert not isinstance(call.args[0], TranscriptClaim), (
             "No TranscriptClaim rows should be created for synthetic transcripts"
@@ -131,6 +138,7 @@ def test_claim_extraction_blocked_on_synthetic_transcript():
 # ─────────────────────────────────────────────────────────────────────────────
 # 4. Checker uses single best vehicle — no multi-vehicle speed mixing
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _make_track(track_id: str, speeds_ms: list[float], start_ts: float = 0.0) -> "TrackDetailLite":
     """Build a synthetic TrackDetailLite with world points producing given speeds."""
@@ -146,25 +154,33 @@ def _make_track(track_id: str, speeds_ms: list[float], start_ts: float = 0.0) ->
     return TrackDetailLite(id=track_id, points=pts)
 
 
-def _make_claim(assertion_type: str, value: float | None = None, unit: str | None = None,
-                ts_start: float = 0.0, ts_end: float = 0.0) -> "Claim":
+def _make_claim(
+    assertion_type: str,
+    value: float | None = None,
+    unit: str | None = None,
+    ts_start: float = 0.0,
+    ts_end: float = 0.0,
+) -> "Claim":
     from engine.claims.models import Claim, ClaimAssertion
+
     return Claim(
         id=str(uuid.uuid4()),
         case_id="c1",
         media_id="m1",
         transcript_id="t1",
         speaker="witness",
-        assertions=[ClaimAssertion(
-            assertion_type=assertion_type,
-            subject="Vehicle A",
-            value=value,
-            unit=unit,
-            qualifier=None,
-            raw_text=f"{value} {unit}" if value else "stopped",
-            source_ts_start=ts_start,
-            source_ts_end=ts_end,
-        )],
+        assertions=[
+            ClaimAssertion(
+                assertion_type=assertion_type,
+                subject="Vehicle A",
+                value=value,
+                unit=unit,
+                qualifier=None,
+                raw_text=f"{value} {unit}" if value else "stopped",
+                source_ts_start=ts_start,
+                source_ts_end=ts_end,
+            )
+        ],
         raw_text="",
         confidence=0.7,
     )
@@ -173,8 +189,14 @@ def _make_claim(assertion_type: str, value: float | None = None, unit: str | Non
 def _make_scale():
     try:
         from engine.geometry.scale import ScaleResult
-        return ScaleResult(metres_per_pixel=0.1, reference_distance_m=10, measured_distance_m=10,
-                           relative_error=0.0, source="test")
+
+        return ScaleResult(
+            metres_per_pixel=0.1,
+            reference_distance_m=10,
+            measured_distance_m=10,
+            relative_error=0.0,
+            source="test",
+        )
     except ImportError:
         return MagicMock()  # checker only checks `scale is None`
 
@@ -211,12 +233,13 @@ def test_checker_uses_single_vehicle_not_mixed():
 # 5. Checker converts mph → km/h correctly
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_checker_mph_to_kmh_conversion():
     """
     A claim of 22 mph (~35.4 km/h) against a track at 36 km/h should be
     'supported', not 'contradicted' due to unit mismatch.
     """
-    from engine.claims.checker import check_claim, _to_kmh
+    from engine.claims.checker import _to_kmh, check_claim
 
     # Verify conversion is correct
     assert abs(_to_kmh(22.0, "mph") - 35.406) < 0.1, "22 mph should be ~35.4 km/h"
@@ -235,6 +258,7 @@ def test_checker_mph_to_kmh_conversion():
 # ─────────────────────────────────────────────────────────────────────────────
 # 6. Checker returns insufficient_data for speed when scale is None
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def test_checker_speed_without_scale_is_insufficient_data():
     from engine.claims.checker import check_claim
@@ -259,6 +283,7 @@ def test_checker_speed_without_scale_is_insufficient_data():
 # 7. Extractor timestamps use segment data, not character position
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_extractor_timestamps_from_segments():
     """
     extract_claims_from_segments must use the segment's start/end timestamps,
@@ -267,10 +292,8 @@ def test_extractor_timestamps_from_segments():
     from engine.claims.extractor import extract_claims_from_segments
 
     segments = [
-        {"speaker": "witness", "start": 45.2, "end": 52.8,
-         "text": "The car was going 80 km/h."},
-        {"speaker": "driver", "start": 60.0, "end": 65.0,
-         "text": "I had stopped completely."},
+        {"speaker": "witness", "start": 45.2, "end": 52.8, "text": "The car was going 80 km/h."},
+        {"speaker": "driver", "start": 60.0, "end": 65.0, "text": "I had stopped completely."},
     ]
     claims = extract_claims_from_segments(segments, case_id="c1", transcript_id="t1", media_id="m1")
 
@@ -322,6 +345,7 @@ def test_extractor_plain_text_timestamps_are_zero():
 # 8 & 9. PATCH re-extracts assertions and marks prior verdicts as stale_edit
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_patch_claim_invalidates_prior_verdict():
     """
     Patching raw_text on a claim must:
@@ -365,6 +389,7 @@ def test_patch_claim_invalidates_prior_verdict():
 # ─────────────────────────────────────────────────────────────────────────────
 # 10. Muse Voice raises AdapterUnavailable (not generic) when unconfigured
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def test_muse_voice_raises_adapter_unavailable_when_unconfigured():
     """

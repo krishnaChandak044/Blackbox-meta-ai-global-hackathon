@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import uuid
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -28,10 +26,19 @@ async def _get_case_or_404(case_id: str, db: AsyncSession) -> Case:
 
 
 @router.post("/", response_model=TranscriptResponse, status_code=status.HTTP_201_CREATED)
-async def create_transcript(case_id: str, payload: TranscriptCreate, db: AsyncSession = Depends(get_db), user: str = Depends(current_user)) -> TranscriptResponse:
+async def create_transcript(
+    case_id: str,
+    payload: TranscriptCreate,
+    db: AsyncSession = Depends(get_db),
+    user: str = Depends(current_user),
+) -> TranscriptResponse:
     await _get_case_or_404(case_id, db)
     if payload.media_id:
-        m = await db.execute(select(SourceMedia).where(SourceMedia.id == payload.media_id, SourceMedia.case_id == case_id))
+        m = await db.execute(
+            select(SourceMedia).where(
+                SourceMedia.id == payload.media_id, SourceMedia.case_id == case_id
+            )
+        )
         if not m.scalar_one_or_none():
             raise HTTPException(status_code=404, detail="Media not found for this case")
     tr = Transcript(
@@ -54,16 +61,29 @@ async def create_transcript(case_id: str, payload: TranscriptCreate, db: AsyncSe
 
 
 @router.get("/", response_model=list[TranscriptResponse])
-async def list_transcripts(case_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(current_user)) -> list[TranscriptResponse]:
+async def list_transcripts(
+    case_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(current_user)
+) -> list[TranscriptResponse]:
     await _get_case_or_404(case_id, db)
-    result = await db.execute(select(Transcript).where(Transcript.case_id == case_id).order_by(Transcript.created_at.desc()))
+    result = await db.execute(
+        select(Transcript)
+        .where(Transcript.case_id == case_id)
+        .order_by(Transcript.created_at.desc())
+    )
     return [TranscriptResponse.model_validate(t) for t in result.scalars().all()]
 
 
 @router.get("/{transcript_id}", response_model=TranscriptResponse)
-async def get_transcript(case_id: str, transcript_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(current_user)) -> TranscriptResponse:
+async def get_transcript(
+    case_id: str,
+    transcript_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(current_user),
+) -> TranscriptResponse:
     await _get_case_or_404(case_id, db)
-    result = await db.execute(select(Transcript).where(Transcript.id == transcript_id, Transcript.case_id == case_id))
+    result = await db.execute(
+        select(Transcript).where(Transcript.id == transcript_id, Transcript.case_id == case_id)
+    )
     tr = result.scalar_one_or_none()
     if not tr:
         raise HTTPException(status_code=404, detail="Transcript not found")
@@ -71,9 +91,16 @@ async def get_transcript(case_id: str, transcript_id: str, db: AsyncSession = De
 
 
 @router.delete("/{transcript_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_transcript(case_id: str, transcript_id: str, db: AsyncSession = Depends(get_db), _: str = Depends(current_user)) -> None:
+async def delete_transcript(
+    case_id: str,
+    transcript_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(current_user),
+) -> None:
     await _get_case_or_404(case_id, db)
-    result = await db.execute(select(Transcript).where(Transcript.id == transcript_id, Transcript.case_id == case_id))
+    result = await db.execute(
+        select(Transcript).where(Transcript.id == transcript_id, Transcript.case_id == case_id)
+    )
     tr = result.scalar_one_or_none()
     if not tr:
         raise HTTPException(status_code=404, detail="Transcript not found")
@@ -82,13 +109,26 @@ async def delete_transcript(case_id: str, transcript_id: str, db: AsyncSession =
 
 
 @router.post("/media/{media_id}/transcribe", status_code=status.HTTP_202_ACCEPTED)
-async def transcribe_media(case_id: str, media_id: str, db: AsyncSession = Depends(get_db), user: str = Depends(current_user)) -> dict:
+async def transcribe_media(
+    case_id: str,
+    media_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: str = Depends(current_user),
+) -> dict:
     await _get_case_or_404(case_id, db)
-    result = await db.execute(select(SourceMedia).where(SourceMedia.id == media_id, SourceMedia.case_id == case_id))
+    result = await db.execute(
+        select(SourceMedia).where(SourceMedia.id == media_id, SourceMedia.case_id == case_id)
+    )
     media = result.scalar_one_or_none()
     if not media:
         raise HTTPException(status_code=404, detail="Media not found")
-    job = ProcessingJob(id=str(uuid.uuid4()), case_id=case_id, media_id=media_id, stage=JobStage.TRANSCRIBE, status=JobStatus.QUEUED)
+    job = ProcessingJob(
+        id=str(uuid.uuid4()),
+        case_id=case_id,
+        media_id=media_id,
+        stage=JobStage.TRANSCRIBE,
+        status=JobStatus.QUEUED,
+    )
     db.add(job)
     await db.commit()
     try:

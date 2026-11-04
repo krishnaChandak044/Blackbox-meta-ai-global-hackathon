@@ -22,8 +22,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from engine.geometry.homography import homography_fit_is_usable
 
+from engine.geometry.homography import homography_fit_is_usable
 from services.api.auth.session import current_user
 from services.api.db.models import (
     HomographyFit,
@@ -166,40 +166,49 @@ async def get_track(
     # Never expose stored metre coordinates from a rejected/legacy fit as if
     # they were trustworthy physical measurements. Pixel tracks remain usable.
     fit_result = await db.execute(
-        select(HomographyFit).where(
-            HomographyFit.media_id == media_id, HomographyFit.is_active.is_(True)
-        ).order_by(HomographyFit.fitted_at.desc()).limit(1)
+        select(HomographyFit)
+        .where(HomographyFit.media_id == media_id, HomographyFit.is_active.is_(True))
+        .order_by(HomographyFit.fitted_at.desc())
+        .limit(1)
     )
     fit = fit_result.scalar_one_or_none()
-    physical_coordinates_valid = bool(fit and homography_fit_is_usable(
-        anchor_count=fit.anchor_count,
-        validation_anchor_count=fit.validation_anchor_count,
-        reprojection_rmse_px=fit.reprojection_rmse_px,
-        condition_number=fit.condition_number,
-        scale_metres_per_pixel=fit.scale_metres_per_pixel,
-        scale_relative_error=fit.scale_relative_error,
-        require_metric_scale=True,
-    ))
+    physical_coordinates_valid = bool(
+        fit
+        and homography_fit_is_usable(
+            anchor_count=fit.anchor_count,
+            validation_anchor_count=fit.validation_anchor_count,
+            reprojection_rmse_px=fit.reprojection_rmse_px,
+            condition_number=fit.condition_number,
+            scale_metres_per_pixel=fit.scale_metres_per_pixel,
+            scale_relative_error=fit.scale_relative_error,
+            require_metric_scale=True,
+        )
+    )
 
     summary = TrackSummary.model_validate(track)
     return TrackDetail(
         **summary.model_dump(),
-        points=[TrackPointOut.model_validate(p) if physical_coordinates_valid else TrackPointOut(
-            frame_index=p.frame_index,
-            presentation_ts_s=p.presentation_ts_s,
-            bbox_x_min=p.bbox_x_min,
-            bbox_y_min=p.bbox_y_min,
-            bbox_x_max=p.bbox_x_max,
-            bbox_y_max=p.bbox_y_max,
-            gc_pixel_x=p.gc_pixel_x,
-            gc_pixel_y=p.gc_pixel_y,
-            world_x=None,
-            world_y=None,
-            sigma_m=None,
-            detection_confidence=p.detection_confidence,
-            is_interpolated=p.is_interpolated,
-            is_human_corrected=p.is_human_corrected,
-        ) for p in pts]
+        points=[
+            TrackPointOut.model_validate(p)
+            if physical_coordinates_valid
+            else TrackPointOut(
+                frame_index=p.frame_index,
+                presentation_ts_s=p.presentation_ts_s,
+                bbox_x_min=p.bbox_x_min,
+                bbox_y_min=p.bbox_y_min,
+                bbox_x_max=p.bbox_x_max,
+                bbox_y_max=p.bbox_y_max,
+                gc_pixel_x=p.gc_pixel_x,
+                gc_pixel_y=p.gc_pixel_y,
+                world_x=None,
+                world_y=None,
+                sigma_m=None,
+                detection_confidence=p.detection_confidence,
+                is_interpolated=p.is_interpolated,
+                is_human_corrected=p.is_human_corrected,
+            )
+            for p in pts
+        ],
     )
 
 
@@ -237,22 +246,27 @@ async def run_tracking(
     )
     db.add(job)
     if sam_key:
-        db.add(ProcessingLog(
-            case_id=case_id,
-            media_id=media_id,
-            stage="track_external_consent",
-            tool_name="sam-3.1-meta-api",
-            tool_version="1",
-            input_hash=media.sha256,
-            parameters=json.dumps({
-                "consent_to_external_processing": True,
-                "job_id": job.id,
-                "provider": "Meta Model API",
-                "source_sha256": media.sha256,
-            }, sort_keys=True),
-            operator=f"user:{user}",
-            notes="User explicitly authorized sending this clip to Meta Model API for SAM 3.1 tracking.",
-        ))
+        db.add(
+            ProcessingLog(
+                case_id=case_id,
+                media_id=media_id,
+                stage="track_external_consent",
+                tool_name="sam-3.1-meta-api",
+                tool_version="1",
+                input_hash=media.sha256,
+                parameters=json.dumps(
+                    {
+                        "consent_to_external_processing": True,
+                        "job_id": job.id,
+                        "provider": "Meta Model API",
+                        "source_sha256": media.sha256,
+                    },
+                    sort_keys=True,
+                ),
+                operator=f"user:{user}",
+                notes="User explicitly authorized sending this clip to Meta Model API for SAM 3.1 tracking.",
+            )
+        )
     await db.commit()
 
     # Dispatch Celery task
@@ -268,7 +282,11 @@ async def run_tracking(
         await db.commit()
         raise HTTPException(status_code=503, detail="Worker unavailable") from exc
 
-    return {"job_id": job.id, "status": "queued", "tracker": "sam-3.1" if sam_key else "local-motion"}
+    return {
+        "job_id": job.id,
+        "status": "queued",
+        "tracker": "sam-3.1" if sam_key else "local-motion",
+    }
 
 
 # ── Human confirm ──────────────────────────────────────────────────────────────

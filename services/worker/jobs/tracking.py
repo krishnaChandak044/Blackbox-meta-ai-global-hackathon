@@ -112,22 +112,30 @@ def _run(db: Session, media_id: str, job: ProcessingJob) -> dict:
     # ── 2. Choose tracker ─────────────────────────────────────────────────────
     sam_key = os.getenv("SAM_API_KEY") or os.getenv("MODEL_API_KEY", "")
     if sam_key:
-        consent_rows = db.execute(
-            select(ProcessingLog).where(
-                ProcessingLog.case_id == media.case_id,
-                ProcessingLog.media_id == media_id,
-                ProcessingLog.stage == "track_external_consent",
-            ).order_by(ProcessingLog.timestamp.desc())
-        ).scalars().all()
+        consent_rows = (
+            db.execute(
+                select(ProcessingLog)
+                .where(
+                    ProcessingLog.case_id == media.case_id,
+                    ProcessingLog.media_id == media_id,
+                    ProcessingLog.stage == "track_external_consent",
+                )
+                .order_by(ProcessingLog.timestamp.desc())
+            )
+            .scalars()
+            .all()
+        )
         consented = False
         for entry in consent_rows:
             try:
                 record = json.loads(entry.parameters or "{}")
             except json.JSONDecodeError:
                 continue
-            if (record.get("job_id") == job.id
-                    and record.get("source_sha256") == media.sha256
-                    and record.get("consent_to_external_processing") is True):
+            if (
+                record.get("job_id") == job.id
+                and record.get("source_sha256") == media.sha256
+                and record.get("consent_to_external_processing") is True
+            ):
                 consented = True
                 break
         if not consented:
@@ -170,7 +178,10 @@ def _run(db: Session, media_id: str, job: ProcessingJob) -> dict:
         if ground_traj:
             for gp in ground_traj.positions:
                 world_by_frame[gp.frame_index] = (
-                    gp.world.x, gp.world.y, gp.sigma_m, gp.u_pixel_localisation
+                    gp.world.x,
+                    gp.world.y,
+                    gp.sigma_m,
+                    gp.u_pixel_localisation,
                 )
 
         ot = ObjectTrack(
@@ -221,11 +232,14 @@ def _run(db: Session, media_id: str, job: ProcessingJob) -> dict:
             tool_name=tracker.MODEL_NAME,
             tool_version=getattr(tracker, "MODEL_VERSION", TRACKER_VERSION),
             input_hash=media.sha256,
-            parameters=json.dumps({
-                "provider": "meta_model_api" if sam_key else "local",
-                "min_confidence": 0.4,
-                "source_sha256": media.sha256,
-            }, sort_keys=True),
+            parameters=json.dumps(
+                {
+                    "provider": "meta_model_api" if sam_key else "local",
+                    "min_confidence": 0.4,
+                    "source_sha256": media.sha256,
+                },
+                sort_keys=True,
+            ),
             operator="system",
             notes=(
                 f"{len(tracks)} tracks produced. "

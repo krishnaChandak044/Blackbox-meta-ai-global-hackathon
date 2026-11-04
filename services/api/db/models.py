@@ -393,6 +393,7 @@ class TrackPointRow(Base):
 
     track: Mapped["ObjectTrack"] = relationship("ObjectTrack", back_populates="points")
 
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Phase 3 — Language & Claims
 # ══════════════════════════════════════════════════════════════════════════════
@@ -403,7 +404,9 @@ class Transcript(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"))
-    media_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("source_media.id", ondelete="SET NULL"), nullable=True)
+    media_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("source_media.id", ondelete="SET NULL"), nullable=True
+    )
     speaker_count: Mapped[int] = mapped_column(Integer, default=1)
     language: Mapped[str] = mapped_column(String(10), default="en")
     raw_text: Mapped[str] = mapped_column(Text)
@@ -422,9 +425,13 @@ class TranscriptClaim(Base):
     __tablename__ = "transcript_claims"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    transcript_id: Mapped[str] = mapped_column(String(36), ForeignKey("transcripts.id", ondelete="CASCADE"))
+    transcript_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("transcripts.id", ondelete="CASCADE")
+    )
     case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"))
-    media_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("source_media.id", ondelete="SET NULL"), nullable=True)
+    media_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("source_media.id", ondelete="SET NULL"), nullable=True
+    )
     speaker: Mapped[str] = mapped_column(String(100), default="witness_1")
     raw_text: Mapped[str] = mapped_column(Text)
     assertions_json: Mapped[str] = mapped_column(Text)
@@ -436,14 +443,18 @@ class TranscriptClaim(Base):
     # When raw_text is edited, assertions are re-extracted and old verdicts are invalidated
     assertions_edited_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     verdict_invalidated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    edit_history_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON list of {ts, field, old, new, by}
+    edit_history_json: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )  # JSON list of {ts, field, old, new, by}
 
 
 class ClaimCheck(Base):
     __tablename__ = "claim_checks"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    claim_id: Mapped[str] = mapped_column(String(36), ForeignKey("transcript_claims.id", ondelete="CASCADE"))
+    claim_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("transcript_claims.id", ondelete="CASCADE")
+    )
     case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"))
     verdict: Mapped[str] = mapped_column(String(30))
     confidence: Mapped[float] = mapped_column(Float, default=0.5)
@@ -451,7 +462,9 @@ class ClaimCheck(Base):
     evidence_frame_end: Mapped[int | None] = mapped_column(Integer)
     evidence_json: Mapped[str | None] = mapped_column(Text)
     explanation: Mapped[str] = mapped_column(Text)
-    homography_fit_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("homography_fits.id", ondelete="SET NULL"), nullable=True)
+    homography_fit_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("homography_fits.id", ondelete="SET NULL"), nullable=True
+    )
     checked_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     checked_by: Mapped[str] = mapped_column(String(100), default="system")
 
@@ -465,26 +478,35 @@ class DynamicsRun(Base):
     Linked to specific track, calibration, and media content versions.
     Outputs are stored as JSON blobs — never reused when inputs change.
     """
+
     __tablename__ = "dynamics_runs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"))
-    media_id: Mapped[str] = mapped_column(String(36), ForeignKey("source_media.id", ondelete="CASCADE"))
+    media_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("source_media.id", ondelete="CASCADE")
+    )
 
     # Input provenance — changing any of these makes this run stale
-    track_id: Mapped[str] = mapped_column(String(36), ForeignKey("object_tracks.id", ondelete="RESTRICT"))
+    track_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("object_tracks.id", ondelete="RESTRICT")
+    )
     track_version_hash: Mapped[str] = mapped_column(String(64))
-    calibration_fit_id: Mapped[str] = mapped_column(String(36), ForeignKey("homography_fits.id", ondelete="RESTRICT"))
+    calibration_fit_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("homography_fits.id", ondelete="RESTRICT")
+    )
     media_sha256: Mapped[str] = mapped_column(String(64))
     model_name: Mapped[str] = mapped_column(String(100))
     model_version: Mapped[str] = mapped_column(String(20))
     software_revision: Mapped[str] = mapped_column(String(64))
     seed: Mapped[int] = mapped_column(Integer)
-    params_json: Mapped[str] = mapped_column(Text)          # exact parameters snapshot
+    params_json: Mapped[str] = mapped_column(Text)  # exact parameters snapshot
 
     # Run status
     status: Mapped[str] = mapped_column(String(20), default="queued")
-    job_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("processing_jobs.id"), nullable=True)
+    job_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("processing_jobs.id"), nullable=True
+    )
 
     # Results — stored as serialised JSON (immutable after status=done)
     fitted_points_json: Mapped[str | None] = mapped_column(Text)
@@ -515,12 +537,17 @@ class CounterfactualRun(Base):
     Versioned counterfactual simulation result.
     Always labeled ILLUSTRATIVE — linked to an immutable DynamicsRun.
     """
+
     __tablename__ = "counterfactual_runs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"))
-    media_id: Mapped[str] = mapped_column(String(36), ForeignKey("source_media.id", ondelete="CASCADE"))
-    baseline_run_id: Mapped[str] = mapped_column(String(36), ForeignKey("dynamics_runs.id", ondelete="CASCADE"))
+    media_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("source_media.id", ondelete="CASCADE")
+    )
+    baseline_run_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("dynamics_runs.id", ondelete="CASCADE")
+    )
 
     # User-declared intervention (JSON)
     intervention_json: Mapped[str] = mapped_column(Text)
@@ -548,12 +575,17 @@ class RivalSearch(Base):
     Immutable record of a bounded rival-hypothesis search.
     Includes the full manifest (never implies exhaustiveness).
     """
+
     __tablename__ = "rival_searches"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"))
-    media_id: Mapped[str] = mapped_column(String(36), ForeignKey("source_media.id", ondelete="CASCADE"))
-    primary_run_id: Mapped[str] = mapped_column(String(36), ForeignKey("dynamics_runs.id", ondelete="CASCADE"))
+    media_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("source_media.id", ondelete="CASCADE")
+    )
+    primary_run_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("dynamics_runs.id", ondelete="CASCADE")
+    )
 
     # Search manifest (JSON) — dimensions, bounds, seed, objective, threshold, n_evaluated
     manifest_json: Mapped[str] = mapped_column(Text)
@@ -574,7 +606,9 @@ class EvidenceNeed(Base):
     __tablename__ = "evidence_needs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"), index=True)
+    case_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("cases.id", ondelete="CASCADE"), index=True
+    )
     need_key: Mapped[str] = mapped_column(String(120))
     snapshot_json: Mapped[str] = mapped_column(Text)
     state: Mapped[str] = mapped_column(String(30), default="suggested")
@@ -583,14 +617,18 @@ class EvidenceNeed(Base):
     created_by: Mapped[str] = mapped_column(String(100))
     updated_by: Mapped[str] = mapped_column(String(100))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
 
 
 class ReviewerAction(Base):
     __tablename__ = "reviewer_actions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"), index=True)
+    case_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("cases.id", ondelete="CASCADE"), index=True
+    )
     target_type: Mapped[str] = mapped_column(String(40))
     target_id: Mapped[str] = mapped_column(String(36))
     action: Mapped[str] = mapped_column(String(60))
@@ -604,7 +642,9 @@ class AtlasConsent(Base):
     __tablename__ = "atlas_consents"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"), unique=True)
+    case_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("cases.id", ondelete="CASCADE"), unique=True
+    )
     opted_in: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     scope_version: Mapped[str] = mapped_column(String(40))
     actor: Mapped[str] = mapped_column(String(100))
@@ -617,7 +657,9 @@ class AtlasConsentEvent(Base):
     __tablename__ = "atlas_consent_events"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"), index=True)
+    case_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("cases.id", ondelete="CASCADE"), index=True
+    )
     opted_in: Mapped[bool] = mapped_column(Boolean, nullable=False)
     scope_version: Mapped[str] = mapped_column(String(40))
     actor: Mapped[str] = mapped_column(String(100))
@@ -628,8 +670,12 @@ class AtlasContribution(Base):
     __tablename__ = "atlas_contributions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"), index=True)
-    source_run_id: Mapped[str] = mapped_column(String(36), ForeignKey("dynamics_runs.id", ondelete="RESTRICT"))
+    case_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("cases.id", ondelete="CASCADE"), index=True
+    )
+    source_run_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("dynamics_runs.id", ondelete="RESTRICT")
+    )
     dedupe_key: Mapped[str] = mapped_column(String(64), unique=True)
     coarse_cell: Mapped[str] = mapped_column(String(40), index=True)
     time_bucket: Mapped[str] = mapped_column(String(12))
@@ -644,7 +690,9 @@ class ExportRecord(Base):
     __tablename__ = "export_records"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id", ondelete="CASCADE"), index=True)
+    case_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("cases.id", ondelete="CASCADE"), index=True
+    )
     case_revision_hash: Mapped[str] = mapped_column(String(64))
     manifest_sha256: Mapped[str | None] = mapped_column(String(64))
     pdf_sha256: Mapped[str | None] = mapped_column(String(64))
@@ -652,7 +700,9 @@ class ExportRecord(Base):
     pdf_path: Mapped[str | None] = mapped_column(String(1000))
     json_path: Mapped[str | None] = mapped_column(String(1000))
     status: Mapped[str] = mapped_column(String(20), default="queued")
-    job_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("processing_jobs.id"), nullable=True)
+    job_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("processing_jobs.id"), nullable=True
+    )
     error_message: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[str] = mapped_column(String(100))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
